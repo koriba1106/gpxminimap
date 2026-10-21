@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- 厳格なCSP: 外部通信・インラインスクリプト・インラインスタイルをすべて遮断し、同一オリジンのstyle.cssとapp.jsのみ許可 -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src blob: data:; media-src blob:; connect-src 'none'; base-uri 'none'; form-action 'none';">
+  <!-- 厳格なCSP: 外部通信・インラインスクリプト・インラインスタイルを遮断し、同一オリジンのstyle.css / app.js / sample_routegpx.gpx のみ許可 -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src blob: data:; media-src blob:; connect-src 'self'; base-uri 'none'; form-action 'none';">
   <title>GPX Route Studio - 登山経路アニメーション合成ツール</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -21,8 +21,8 @@
       <div class="brand">
         <div class="mark" aria-hidden="true">⛰</div>
         <div>
-          <h1>GPX Route Studio</h1>
-          <p>登山GPSログから著作権フリーのルート線画・現在地点滅オーバーレイ動画＆合成写真を生成 ver1.1</p>
+          <h1>ＧＰＸから動画用ミニマップ作製 by 武庫</h1>
+          <p>登山GPSログから著作権フリーのルート線画・現在地点滅オーバーレイ動画＆合成写真を生成 ver 1.2</p>
         </div>
       </div>
       <div class="header-actions">

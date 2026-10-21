@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="GPX Route Studio" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>六甲銀座ルート</name>
+  </metadata>
+  <wpt lat="34.7250" lon="135.2350">
+    <name>芦屋川・登山口</name>
+  </wpt>
+  <wpt lat="34.7520" lon="135.2510">
+    <name>六甲ガーデンテラス</name>
+  </wpt>
+  <wpt lat="34.7770" lon="135.2637">
+    <name>六甲山最高峰 (931m)</name>
+  </wpt>
+  <wpt lat="34.7910" lon="135.3020">
+    <name>大谷乗越</name>
+  </wpt>
+  <wpt lat="34.8080" lon="135.3400">
+    <name>宝塚・下山ゴール</name>
+  </wpt>
+  <trk>
+    <name>六甲縦走トラック</name>
+    <trkseg>
+      <trkpt lat="34.7250" lon="135.2350" />
+      <trkpt lat="34.7380" lon="135.2420" />
+      <trkpt lat="34.7520" lon="135.2510" />
+      <trkpt lat="34.7640" lon="135.2580" />
+      <trkpt lat="34.7770" lon="135.2637" />
+      <trkpt lat="34.7850" lon="135.2810" />
+      <trkpt lat="34.7910" lon="135.3020" />
+      <trkpt lat="34.8010" lon="135.3240" />
+      <trkpt lat="34.8080" lon="135.3400" />
+    </trkseg>
+  </trk>
+</gpx>
