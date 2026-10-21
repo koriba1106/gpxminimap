@@ -465,7 +465,7 @@
 
     if (!hasTrack) {
       UI.pointBadge.textContent = '0 pts';
-      UI.metaInfo.textContent = 'GPXファイルが未読み込みです。';
+      UI.metaInfo.textContent = '上の枠にGPXファイルをドロップするか、クリックして選択してください。';
       return;
     }
 
@@ -702,7 +702,29 @@
     }
   });
 
-  // --- 12. 外部サンプルGPXファイル (sample_routegpx.gpx) の読み込み ---
+  // --- 12. 外部サンプルGPXファイル (sample_routegpx.gpx) の読み込みと不在時の安全な待機 ---
+  function resetToEmptyWaitingState() {
+    State.gpxFileName = '';
+    State.rawPointCount = 0;
+    State.trackPoints = [];
+    State.cumDist = new Float64Array(0);
+    State.totalDist = 0;
+    State.waypoints = [];
+    State.selectedWptId = null;
+    State.seekRatio = 0.5;
+    State.seekPoint = null;
+    State.seekBlinking = false;
+    UI.routeSeekRange.value = '500';
+    UI.seekBadge.textContent = '50%地点';
+    UI.btnToggleSeekBlink.setAttribute('aria-pressed', 'false');
+    UI.btnToggleSeekBlink.textContent = 'シーク位置を点滅: OFF';
+    closeInlineEditor(false);
+    ctx.clearRect(0, 0, CONFIG.CANVAS_W, CONFIG.CANVAS_H);
+    applyPreset('br');
+    updateMetaText();
+    syncWaypointSelectUI();
+  }
+
   async function loadSampleMountainData() {
     if (State.isRecording) return;
     try {
@@ -733,8 +755,12 @@
       updateMetaText();
       syncWaypointSelectUI();
       setStatus(`サンプル山行データ（${CONFIG.SAMPLE_GPX_FILE}）を読み込みました。`);
-    } catch (err) {
-      setStatus(`サンプルGPX（${CONFIG.SAMPLE_GPX_FILE}）の読み込みに失敗しました。同じディレクトリに配置し、WebサーバーまたはGitHub Pages経由で開いてください。`, true);
+    } catch (_) {
+      // sample_routegpx.gpxが存在しない場合はエラー表示とせず、未読み込み状態なら待機画面に整えて案内を表示する
+      if (State.trackPoints.length === 0) {
+        resetToEmptyWaitingState();
+      }
+      setStatus('GPXファイルをドロップまたはクリックして読み込んでください。', false);
     }
   }
 
@@ -742,9 +768,9 @@
 
   UI.btnResetAll.addEventListener('click', () => {
     releasePhotoMemory();
-    loadSampleMountainData();
+    resetToEmptyWaitingState();
     UI.testBox.hidden = true;
-    setStatus('すべての設定を初期状態にリセットしました。');
+    loadSampleMountainData();
   });
 
   // --- 13. セキュアGPXパーサー & 写真ローダー（XXE防御・世代排他ロック付き） ---
@@ -1497,11 +1523,12 @@
       simplified.length >= 2 && simplified.length <= CONFIG.MAX_RENDER_PTS && anchorKept
     );
 
-    // Test 2: 距離比例の二分探索＆線形補間 (Lerp) の検証
+    // Test 2: 距離比例の二分探索＆線形補間 (Lerp) の検証（GPX未読込時もテストできるよう確認）
+    const hasData = State.trackPoints.length >= 2 && State.totalDist > 0;
     const midInterp = getPointAtDistanceRatio(0.5);
     assert(
-      `累積距離テーブル二分探索 & 線形補間 (50%地点 lat=${midInterp.lat.toFixed(4)}, lon=${midInterp.lon.toFixed(4)})`,
-      Number.isFinite(midInterp.lat) && Number.isFinite(midInterp.lon) && State.totalDist > 0
+      `累積距離テーブル二分探索 & 線形補間 (${hasData ? `50%地点 lat=${midInterp.lat.toFixed(4)}, lon=${midInterp.lon.toFixed(4)}` : '待機状態安全動作'})`,
+      Number.isFinite(midInterp.lat) && Number.isFinite(midInterp.lon)
     );
 
     // Test 3: 座標投影・逆投影の数学的整合性検証
