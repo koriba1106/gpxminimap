@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- 厳格なCSP: 外部通信・インラインスクリプト・インラインスタイルをすべて遮断し、同一オリジンのstyle.cssとapp.jsのみ許可 -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src blob: data:; media-src blob:; connect-src 'none'; base-uri 'none'; form-action 'none';">
+  <title>GPX Route Studio - 登山経路アニメーション合成ツール</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- クリックジャッキング（外部iframe埋め込み）検知時のブロック表示 -->
+  <div id="frameBlocked" class="frame-blocked" hidden>
+    セキュリティ保護のため、外部フレーム（iframe）内での表示および実行はブロックされています。直接ページを開いてご利用ください。
+  </div>
+
+  <div id="appRoot" class="app">
+    <!-- ヘッダー -->
+    <header>
+      <div class="brand">
+        <div class="mark" aria-hidden="true">⛰</div>
+        <div>
+          <h1>GPX Route Studio</h1>
+          <p>登山GPSログから著作権フリーのルート線画・現在地点滅オーバーレイ動画＆合成写真を生成 ver1.1</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button type="button" id="btnSample" class="secondary">サンプル山行を読込</button>
+        <button type="button" id="btnSelfTest" class="subtle">自己診断テスト</button>
+        <button type="button" id="btnResetAll" class="subtle">初期化</button>
+      </div>
+    </header>
+
+    <!-- ワークフローステップ -->
+    <div class="steps" aria-label="基本操作ステップ">
+      <span class="step">1. GPX・写真をドロップ</span>
+      <span class="step">2. 配置サムネイル・色を選択</span>
+      <span class="step">3. 点滅させるWaypointを指定</span>
+      <span class="step">4. 合成用動画(.webm) / 画像(.png)保存</span>
+    </div>
+
+    <!-- メイン2カラムレイアウト -->
+    <main class="layout">
+
+      <!-- 左カラム：ファイルドロップ & プレビュー & 5配置プリセットサムネイル -->
+      <section class="panel" aria-labelledby="previewHeading">
+        <div class="panel-head">
+          <h2 id="previewHeading">プレビュー &amp; 素材読み込み</h2>
+          <span id="pointBadge" class="badge">0 pts</span>
+        </div>
+
+        <!-- ドラッグ＆ドロップ対応ファイルゾーン -->
+        <label id="fileZone" class="file-zone" tabindex="0">
+          <span>📂 GPXファイル と 背景写真（任意）をここにドロップ、またはクリックして選択</span>
+          <small>対応形式: .gpx (上限25MB) / .jpg, .png, .webp (上限30MB) ・ 複数ファイル同時選択可</small>
+          <input type="file" id="fileInput" accept=".gpx,application/gpx+xml,text/xml,image/jpeg,image/png,image/webp" multiple>
+        </label>
+
+        <div id="metaInfo" class="meta">ファイルを読み込むか、右上の「サンプル山行を読込」を押してください。</div>
+
+        <!-- メインCanvasプレビュー -->
+        <div class="preview" id="previewContainer">
+          <div id="emptyState" class="empty">
+            <strong>GPXデータが読み込まれていません</strong>
+            <span>上の枠にGPXファイルをドロップするか、「サンプル山行を読込」をクリックしてください。</span>
+          </div>
+          <canvas id="mainCanvas" width="1920" height="1080" tabindex="0" aria-label="登山ルートアニメーションプレビュー" hidden></canvas>
+        </div>
+
+        <p class="hint">
+          🖱️ <b>ドラッグ</b>: 地図移動 ／ 🔍 <b>ホイール</b>: 拡大縮小 ／ ⌨️ <b>矢印キー</b>: 微調整 ／ 📍 <b>ダブルクリック</b>: その地点にWaypoint追加
+        </p>
+
+        <!-- 5種類のプリセット配置サムネイル (.thumbs) -->
+        <div class="thumbs" id="presetThumbs" role="group" aria-label="表示位置プリセット">
+          <button type="button" class="thumb" data-preset="full" title="全画面（中央配置）">
+            <canvas width="160" height="90"></canvas>
+            <span>全画面</span>
+          </button>
+          <button type="button" class="thumb" data-preset="br" title="右下ミニマップ">
+            <canvas width="160" height="90"></canvas>
+            <span>右下隅</span>
+          </button>
+          <button type="button" class="thumb" data-preset="bl" title="左下ミニマップ">
+            <canvas width="160" height="90"></canvas>
+            <span>左下隅</span>
+          </button>
+          <button type="button" class="thumb" data-preset="tr" title="右上ミニマップ">
+            <canvas width="160" height="90"></canvas>
+            <span>右上隅</span>
+          </button>
+          <button type="button" class="thumb" data-preset="tl" title="左上ミニマップ">
+            <canvas width="160" height="90"></canvas>
+            <span>左上隅</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- 右カラム：コントロールパネル -->
+      <aside class="panel" aria-labelledby="controlHeading">
+        <div class="panel-head">
+          <h2 id="controlHeading">スタイル &amp; 点滅アニメーション設定</h2>
+          <button type="button" id="btnClearPhoto" class="subtle" disabled>背景写真を解除</button>
+        </div>
+
+        <div class="controls">
+
+          <!-- 1. ルート線の色 (.choice-row 9色) -->
+          <div class="field">
+            <div class="field-header">
+              <span class="field-title">ルート線画の色</span>
+              <span id="lineColorBadge" class="badge">#FFFFFF</span>
+            </div>
+            <div class="choice-row" id="lineColorRow" role="radiogroup" aria-label="ルート線の色">
+              <button type="button" data-color="#ffffff" aria-pressed="true" title="ホワイト">白</button>
+              <button type="button" data-color="#529e78" aria-pressed="false" title="うぐいす">鶯</button>
+              <button type="button" data-color="#ffd60a" aria-pressed="false" title="イエロー">黄</button>
+              <button type="button" data-color="#ff9f0a" aria-pressed="false" title="オレンジ">橙</button>
+              <button type="button" data-color="#ff453a" aria-pressed="false" title="レッド">赤</button>
+              <button type="button" data-color="#64d2ff" aria-pressed="false" title="スカイブルー">空</button>
+              <button type="button" data-color="#30d158" aria-pressed="false" title="グリーン">緑</button>
+              <button type="button" data-color="#bf5af2" aria-pressed="false" title="パープル">紫</button>
+              <button type="button" data-color="#193326" aria-pressed="false" title="濃緑墨">墨</button>
+            </div>
+          </div>
+
+          <!-- 2. 現在地マーカーの色 (.choice-row 9色) -->
+          <div class="field">
+            <div class="field-header">
+              <span class="field-title">現在地マーカーの色</span>
+              <span id="markerColorBadge" class="badge">#FF453A</span>
+            </div>
+            <div class="choice-row" id="markerColorRow" role="radiogroup" aria-label="現在地マーカーの色">
+              <button type="button" data-color="#ff453a" aria-pressed="true" title="レッド">赤</button>
+              <button type="button" data-color="#ff9f0a" aria-pressed="false" title="オレンジ">橙</button>
+              <button type="button" data-color="#ffd60a" aria-pressed="false" title="イエロー">黄</button>
+              <button type="button" data-color="#30d158" aria-pressed="false" title="グリーン">緑</button>
+              <button type="button" data-color="#529e78" aria-pressed="false" title="うぐいす">鶯</button>
+              <button type="button" data-color="#64d2ff" aria-pressed="false" title="シアン">水</button>
+              <button type="button" data-color="#0a84ff" aria-pressed="false" title="ブルー">青</button>
+              <button type="button" data-color="#ff375f" aria-pressed="false" title="ピンク">桃</button>
+              <button type="button" data-color="#ffffff" aria-pressed="false" title="ホワイト">白</button>
+            </div>
+          </div>
+
+          <!-- 3. 地図拡大率 & 線幅・文字サイズ -->
+          <div class="field">
+            <div class="field-header">
+              <label for="zoomRange">地図の拡大スケール</label>
+              <span id="zoomBadge" class="badge">55%</span>
+            </div>
+            <input type="range" id="zoomRange" min="0.15" max="3.0" step="0.02" value="0.55">
+          </div>
+
+          <div class="field">
+            <div class="field-header">
+              <label for="lineWidthRange">線の太さ / 地名文字サイズ</label>
+              <span id="sizeBadge" class="badge">5px / 20px</span>
+            </div>
+            <div class="button-row">
+              <input type="range" id="lineWidthRange" min="1" max="16" step="0.5" value="5" title="線の太さ">
+              <input type="range" id="fontSizeRange" min="11" max="38" step="1" value="20" title="文字サイズ">
+            </div>
+            <div class="button-row">
+              <button type="button" id="btnTogglePlate" class="secondary" aria-pressed="true">背景プレート: ON</button>
+              <button type="button" id="btnToggleOutline" class="secondary" aria-pressed="true">黒フチ取り: ON</button>
+            </div>
+          </div>
+
+          <!-- 4. 任意のWaypoint選択・点滅切り替え & 非ブロッキング地名編集 -->
+          <div class="field">
+            <div class="field-header">
+              <label for="wptSelect">Waypoint（日本語地名）の点滅・管理</label>
+              <span id="blinkCountBadge" class="badge">点滅: 1箇所</span>
+            </div>
+            <select id="wptSelect" aria-label="編集するWaypointを選択"></select>
+            <div class="button-row">
+              <button type="button" id="btnToggleWptBlink" class="primary">⚡ 選択地点の点滅切替</button>
+              <button type="button" id="btnSoloWptBlink" class="subtle">単独点滅</button>
+              <button type="button" id="btnBlinkAllWpt" class="subtle">全地点切替</button>
+            </div>
+            <div class="button-row">
+              <button type="button" id="btnToggleWptLabel" class="subtle">地名表示切替</button>
+              <button type="button" id="btnOpenRename" class="subtle">地名を変更</button>
+              <button type="button" id="btnDeleteWpt" class="subtle">地点削除</button>
+            </div>
+
+            <!-- 非ブロッキング・インライン地名入力パネル（window.prompt廃止） -->
+            <div id="wptEditorPanel" class="field" hidden>
+              <div class="field-header">
+                <label for="wptNameInput" id="wptEditorTitle">地名を入力（40文字以内）</label>
+              </div>
+              <input type="text" id="wptNameInput" maxlength="40" placeholder="例: 槍ヶ岳山荘">
+              <div class="button-row">
+                <button type="button" id="btnSaveWptName" class="primary">確定する</button>
+                <button type="button" id="btnCancelWptName" class="subtle">キャンセル</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 5. ルート上の距離比例シーク & 任意位置へのWaypoint追加 -->
+          <div class="field">
+            <div class="field-header">
+              <label for="routeSeekRange">ルート上の距離比例シーク</label>
+              <span id="seekBadge" class="badge">50%地点</span>
+            </div>
+            <input type="range" id="routeSeekRange" min="0" max="1000" value="500">
+            <div class="button-row">
+              <button type="button" id="btnToggleSeekBlink" class="subtle" aria-pressed="false">シーク位置を点滅: OFF</button>
+              <button type="button" id="btnAddWptAtSeek" class="secondary">＋ この位置に地名を追加</button>
+            </div>
+          </div>
+
+          <!-- 6. 点滅アニメーション種類・速度・マーカーサイズ -->
+          <div class="field">
+            <div class="field-header">
+              <label for="animTypeSelect">点滅アニメーションの種類と速度</label>
+              <span id="speedBadge" class="badge">2.0x / 10px</span>
+            </div>
+            <select id="animTypeSelect">
+              <option value="pulse">パルス波（広がる二重同心円）</option>
+              <option value="blink">ブリージング（緩やかな明滅）</option>
+              <option value="radar">ターゲットスコープ（回転照準）</option>
+              <option value="progress">ルート定速進行＋先端パルス</option>
+            </select>
+            <div class="button-row">
+              <input type="range" id="animSpeedRange" min="0.5" max="5.0" step="0.1" value="2.0" title="点滅・進行の速さ">
+              <input type="range" id="markerSizeRange" min="5" max="26" step="1" value="10" title="マーカー半径">
+            </div>
+            <small>左スライダー: 点滅スピード ／ 右スライダー: マーカーサイズ</small>
+          </div>
+
+          <!-- 7. 動画合成モード（クロマキー・透過最適化） & 書き出し -->
+          <div class="field">
+            <div class="field-header">
+              <label for="bgModeSelect">他の動画との合成モード &amp; 録画秒数</label>
+              <span id="secBadge" class="badge">5秒</span>
+            </div>
+            <select id="bgModeSelect">
+              <option value="transparent">背景透過（WebMアルファ / 写真直接合成）</option>
+              <option value="green">グリーンバック（#00FF00 クロマキー・スピル防止済）</option>
+              <option value="blue">ブルーバック（#0000FF クロマキー・スピル防止済）</option>
+              <option value="black">ブラック背景（#000000 スクリーン・加算合成用）</option>
+            </select>
+            <input type="range" id="recordSecRange" min="2" max="30" step="1" value="5" title="録画秒数">
+            <small id="chromaHint">編集ソフトでそのまま重ねられる透過WebM（または写真合成）モードです。</small>
+          </div>
+
+          <div class="action-stack">
+            <button type="button" id="btnExportVideo" class="primary">🎬 合成用アニメーション動画を書き出す (.webm)</button>
+            <button type="button" id="btnExportPng" class="secondary">📷 現在のフレームを静止画保存 (.png)</button>
+          </div>
+
+          <!-- ステータス通知ボックス (.status) -->
+          <div id="statusBox" class="status" role="status" aria-live="polite">
+            準備完了。すべての処理はお使いのブラウザ内だけで安全に実行されます。
+          </div>
+
+          <!-- 自己診断テスト結果ボックス (.test-box) -->
+          <pre id="testBox" class="test-box" hidden></pre>
+
+          <!-- プライバシー・著作権フリー保証 (.privacy) -->
+          <div class="privacy">
+            🔒 <b>完全ローカル処理・商用＆著作権フリー</b><br>
+            GPXや写真は外部サーバーへ一切送信されません。外部の地図タイルを使用せず純粋な座標計算のみで描画するため、書き出した動画・画像はYouTube等でクレジット表記なし・完全ライセンスフリーで他の動画に合成できます。
+          </div>
+
+        </div>
+      </aside>
+    </main>
+
+    <footer class="footer">
+      GPX Route Studio — Zero-Dependency, Chroma-Key Ready &amp; Memory-Safe Web Application
+    </footer>
+  </div>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
