@@ -21,6 +21,7 @@
 
   // --- 2. システム定数・制限値 ---
   const CONFIG = Object.freeze({
+    SAMPLE_GPX_FILE: 'sample_routegpx.gpx',
     MAX_GPX_BYTES: 25 * 1024 * 1024,    // 25MB上限
     MAX_PHOTO_BYTES: 30 * 1024 * 1024,  // 30MB上限
     MAX_XML_LENGTH: 30 * 1024 * 1024,   // 文字列長上限
@@ -701,44 +702,40 @@
     }
   });
 
-  // --- 12. サンプルデータの読み込み ---
-  function loadSampleMountainData() {
-    State.loadSessionId++;
-    const pts = [
-      { lat: 34.7250, lon: 135.2350 },
-      { lat: 34.7380, lon: 135.2420 },
-      { lat: 34.7520, lon: 135.2510 },
-      { lat: 34.7640, lon: 135.2580 },
-      { lat: 34.7770, lon: 135.2637 },
-      { lat: 34.7850, lon: 135.2810 },
-      { lat: 34.7910, lon: 135.3020 },
-      { lat: 34.8010, lon: 135.3240 },
-      { lat: 34.8080, lon: 135.3400 }
-    ];
-    State.gpxFileName = 'sample_rokko_traverse.gpx';
-    State.rawPointCount = pts.length;
-    State.trackPoints = pts;
-    State.waypoints = [
-      { id: State.nextId++, lat: 34.7250, lon: 135.2350, name: '芦屋川・登山口', visible: true, blinking: false },
-      { id: State.nextId++, lat: 34.7520, lon: 135.2510, name: '六甲ガーデンテラス', visible: true, blinking: false },
-      { id: State.nextId++, lat: 34.7770, lon: 135.2637, name: '六甲山最高峰 (931m)', visible: true, blinking: true },
-      { id: State.nextId++, lat: 34.7910, lon: 135.3020, name: '大谷乗越', visible: true, blinking: false },
-      { id: State.nextId++, lat: 34.8080, lon: 135.3400, name: '宝塚・下山ゴール', visible: true, blinking: false }
-    ];
-    State.selectedWptId = State.waypoints[2].id;
-    State.seekRatio = 0.5;
-    State.seekBlinking = false;
-    UI.routeSeekRange.value = '500';
-    UI.seekBadge.textContent = '50%地点';
-    UI.btnToggleSeekBlink.setAttribute('aria-pressed', 'false');
-    UI.btnToggleSeekBlink.textContent = 'シーク位置を点滅: OFF';
-    closeInlineEditor(false);
+  // --- 12. 外部サンプルGPXファイル (sample_routegpx.gpx) の読み込み ---
+  async function loadSampleMountainData() {
+    if (State.isRecording) return;
+    try {
+      const response = await fetch(CONFIG.SAMPLE_GPX_FILE, { cache: 'no-cache' });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const gpxText = await response.text();
+      const sampleFile = new File([gpxText], CONFIG.SAMPLE_GPX_FILE, { type: 'application/gpx+xml' });
 
-    recalculateBoundsAndDistances();
-    applyPreset('br');
-    updateMetaText();
-    syncWaypointSelectUI();
-    setStatus('サンプル山行データ（六甲縦走ルート）を読み込みました。');
+      await processUploadedFiles([sampleFile]);
+
+      // 六甲山最高峰（3番目のWaypoint）が存在する場合は初期点滅対象にする
+      if (State.waypoints.length >= 3) {
+        State.waypoints.forEach((w, idx) => { w.blinking = (idx === 2); });
+        State.selectedWptId = State.waypoints[2].id;
+      }
+      State.seekRatio = 0.5;
+      State.seekBlinking = false;
+      UI.routeSeekRange.value = '500';
+      UI.seekBadge.textContent = '50%地点';
+      UI.btnToggleSeekBlink.setAttribute('aria-pressed', 'false');
+      UI.btnToggleSeekBlink.textContent = 'シーク位置を点滅: OFF';
+      closeInlineEditor(false);
+
+      recalculateBoundsAndDistances();
+      applyPreset('br');
+      updateMetaText();
+      syncWaypointSelectUI();
+      setStatus(`サンプル山行データ（${CONFIG.SAMPLE_GPX_FILE}）を読み込みました。`);
+    } catch (err) {
+      setStatus(`サンプルGPX（${CONFIG.SAMPLE_GPX_FILE}）の読み込みに失敗しました。同じディレクトリに配置し、WebサーバーまたはGitHub Pages経由で開いてください。`, true);
+    }
   }
 
   UI.btnSample.addEventListener('click', loadSampleMountainData);
@@ -1106,8 +1103,6 @@
 
   /**
    * クロマキー合成時に緑/青背景と半透明色が混ざって汚いフリンジ（スピル）が出るのを防ぐマーカー描画
-   * isUnshieldedChroma = true の場合（グリーン/ブルーバックかつ座布団プレートOFF時）は、
-   * 半透明アルファを使わず不透明リングの線幅減衰＋黒ガード枠で描画し、100%クリーンなキーイングを保証する。
    */
   function drawBlinkingMarker(x, y, elapsed, animType, speed, markerSize, isUnshieldedChroma) {
     ctx.save();
@@ -1117,7 +1112,6 @@
         const radius = markerSize + phase * (markerSize * 3.8);
 
         if (isUnshieldedChroma) {
-          // クロマキー直接背景時：半透明を使わず、線幅を細くしていくことで緑との混色を完全防止
           const ringWidth = Math.max(0.5, (1 - phase) * 5.5);
           if (ringWidth > 0.8) {
             ctx.beginPath();
@@ -1152,7 +1146,6 @@
     } else if (animType === 'blink') {
       const wave = (Math.sin(elapsed * speed * 4) + 1) * 0.5;
       if (isUnshieldedChroma) {
-        // クロマキー時は半径の脈動でブリージングを表現（半透明混色を回避）
         const dynRadius = markerSize * (0.85 + wave * 0.75);
         ctx.beginPath();
         ctx.arc(x, y, dynRadius, 0, Math.PI * 2);
@@ -1243,7 +1236,6 @@
     }
 
     // 2. ミニマップ座布団プレート
-    // クロマキー時は不透明（#12241b）にすることで背景の緑/青が透けて混色するのを100%防ぐ
     if (State.showPlate) {
       const pad = 420 * State.view.scale;
       ctx.save();
@@ -1275,7 +1267,6 @@
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
 
-    // クロマキーでプレートOFF時は輪郭スピル防止のため不透明黒フチを描画
     if (State.showOutline || isUnshieldedChroma) {
       ctx.beginPath();
       for (let i = 0; i <= drawEndIndex; i++) {
