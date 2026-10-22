@@ -21,12 +21,15 @@
       <div class="brand">
         <div class="mark" aria-hidden="true">⛰</div>
         <div>
-          <h1>ＧＰＸから動画用ミニマップ作製 by 武庫</h1>
-          <p>登山GPSログから著作権フリーのルート線画・現在地点滅オーバーレイ動画＆合成写真を生成 ver 1.2</p>
+          <h1>GPX Route Studio</h1>
+          <p>登山GPSログから著作権フリーのルート線画・現在地点滅オーバーレイ動画＆合成写真を生成</p>
         </div>
       </div>
       <div class="header-actions">
-        <button type="button" id="btnSample" class="secondary">サンプル山行を読込</button>
+        <button type="button" id="btnSaveProject" class="secondary" title="現在の編集状態をJSONファイルとして保存します">💾 プロジェクト保存</button>
+        <button type="button" id="btnLoadProject" class="secondary" title="保存したプロジェクトJSONファイルを読み込んで再開します">📂 プロジェクト読込</button>
+        <input type="file" id="projectInput" accept=".json,application/json" hidden>
+        <button type="button" id="btnSample" class="subtle">サンプル読込</button>
         <button type="button" id="btnSelfTest" class="subtle">自己診断テスト</button>
         <button type="button" id="btnResetAll" class="subtle">初期化</button>
       </div>
@@ -34,10 +37,10 @@
 
     <!-- ワークフローステップ -->
     <div class="steps" aria-label="基本操作ステップ">
-      <span class="step">1. GPX・写真をドロップ</span>
+      <span class="step">1. GPX・写真・プロジェクト(.json)をドロップ</span>
       <span class="step">2. 配置サムネイル・色を選択</span>
       <span class="step">3. 点滅させるWaypointを指定</span>
-      <span class="step">4. 合成用動画(.webm) / 画像(.png)保存</span>
+      <span class="step">4. 動画(.webm) / 画像(.png) / プロジェクト保存</span>
     </div>
 
     <!-- メイン2カラムレイアウト -->
@@ -50,20 +53,20 @@
           <span id="pointBadge" class="badge">0 pts</span>
         </div>
 
-        <!-- ドラッグ＆ドロップ対応ファイルゾーン -->
+        <!-- ドラッグ＆ドロップ対応ファイルゾーン (.gpx / 画像 / .json すべて対応) -->
         <label id="fileZone" class="file-zone" tabindex="0">
-          <span>📂 GPXファイル と 背景写真（任意）をここにドロップ、またはクリックして選択</span>
-          <small>対応形式: .gpx (上限25MB) / .jpg, .png, .webp (上限30MB) ・ 複数ファイル同時選択可</small>
-          <input type="file" id="fileInput" accept=".gpx,application/gpx+xml,text/xml,image/jpeg,image/png,image/webp" multiple>
+          <span>📂 GPXファイル・背景写真・保存プロジェクト(.json) をここにドロップ、またはクリックして選択</span>
+          <small>対応形式: .gpx (上限25MB) / .jpg, .png, .webp (上限30MB) / プロジェクト .json ・ 複数ファイル同時選択可</small>
+          <input type="file" id="fileInput" accept=".gpx,application/gpx+xml,text/xml,image/jpeg,image/png,image/webp,.json,application/json" multiple>
         </label>
 
-        <div id="metaInfo" class="meta">ファイルを読み込むか、右上の「サンプル山行を読込」を押してください。</div>
+        <div id="metaInfo" class="meta">ファイルを読み込むか、右上の「サンプル読込」を押してください。</div>
 
         <!-- メインCanvasプレビュー -->
         <div class="preview" id="previewContainer">
           <div id="emptyState" class="empty">
             <strong>GPXデータが読み込まれていません</strong>
-            <span>上の枠にGPXファイルをドロップするか、「サンプル山行を読込」をクリックしてください。</span>
+            <span>上の枠にGPXファイル（または保存したプロジェクト .json）をドロップしてください。</span>
           </div>
           <canvas id="mainCanvas" width="1920" height="1080" tabindex="0" aria-label="登山ルートアニメーションプレビュー" hidden></canvas>
         </div>
@@ -186,7 +189,7 @@
               <button type="button" id="btnDeleteWpt" class="subtle">地点削除</button>
             </div>
 
-            <!-- 非ブロッキング・インライン地名入力パネル（window.prompt廃止） -->
+            <!-- 非ブロッキング・インライン地名入力パネル -->
             <div id="wptEditorPanel" class="field" hidden>
               <div class="field-header">
                 <label for="wptNameInput" id="wptEditorTitle">地名を入力（40文字以内）</label>
@@ -263,7 +266,7 @@
           <!-- プライバシー・著作権フリー保証 (.privacy) -->
           <div class="privacy">
             🔒 <b>完全ローカル処理・商用＆著作権フリー</b><br>
-            GPXや写真は外部サーバーへ一切送信されません。外部の地図タイルを使用せず純粋な座標計算のみで描画するため、書き出した動画・画像はYouTube等でクレジット表記なし・完全ライセンスフリーで他の動画に合成できます。
+            GPXや写真、プロジェクトファイルは外部サーバーへ一切送信されません。外部の地図タイルを使用せず純粋な座標計算のみで描画するため、書き出した動画・画像はYouTube等でクレジット表記なし・完全ライセンスフリーで他の動画に合成できます。
           </div>
 
         </div>
