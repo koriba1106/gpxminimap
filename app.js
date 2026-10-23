@@ -1,6 +1,6 @@
 /**
  * GPX Route Studio Workstation - Production Core Engine (app.js)
- * Crash-proof Null-safe DOM binding & Multi-layer Drag-and-Drop Architecture
+ * Guaranteed Initial State: Background Plate OFF (showPlate = false)
  */
 (() => {
   'use strict';
@@ -14,7 +14,7 @@
     return;
   }
 
-  // --- Nullセーフなイベント登録ヘルパー（要素欠落による初期化クラッシュを100%防止） ---
+  // --- Nullセーフなイベント登録ヘルパー ---
   function on(el, type, handler, options) {
     if (el && typeof el.addEventListener === 'function') {
       el.addEventListener(type, handler, options);
@@ -126,7 +126,7 @@
     testBox: document.getElementById('testBox')
   });
 
-  // --- 4. アプリケーション状態管理（起動時の背景プレート showPlate は false = OFF） ---
+  // --- 4. アプリケーション状態管理（起動時は背景プレート OFF・ガイド枠 OFF） ---
   const State = {
     loadSessionId: 0,
     gpxFileName: '',
@@ -145,7 +145,7 @@
     markerRgb: { r: 255, g: 69, b: 58 },
     showPlate: false,
     showOutline: true,
-    showGuide: true,
+    showGuide: false,
     bounds: {
       minLat: 0, maxLat: 1, minLon: 0, maxLon: 1,
       centerLat: 35, cosLat: 1, lonSpan: 0.01, latSpan: 0.01, maxSpan: 0.01
@@ -162,6 +162,16 @@
     recordTimer: null,
     nextId: 1
   };
+
+  // --- 背景プレートの状態を確実に設定・同期する一元管理関数 ---
+  function setPlateState(enabled) {
+    State.showPlate = Boolean(enabled);
+    if (UI.btnTogglePlate) {
+      UI.btnTogglePlate.setAttribute('aria-pressed', State.showPlate ? 'true' : 'false');
+      UI.btnTogglePlate.textContent = `背景プレート: ${State.showPlate ? 'ON' : 'OFF'}`;
+    }
+    renderPresetThumbnails();
+  }
 
   // --- 5. 共通ユーティリティ ---
   function clampNumber(val, min, max, fallback) {
@@ -1158,10 +1168,8 @@
     if (UI.lineWidthNum && UI.lineWidthRange) UI.lineWidthNum.value = UI.lineWidthRange.value;
     if (UI.fontSizeNum && UI.fontSizeRange) UI.fontSizeNum.value = UI.fontSizeRange.value;
 
-    if (UI.btnTogglePlate) {
-      UI.btnTogglePlate.setAttribute('aria-pressed', String(State.showPlate));
-      UI.btnTogglePlate.textContent = `背景プレート: ${State.showPlate ? 'ON' : 'OFF'}`;
-    }
+    setPlateState(State.showPlate);
+
     if (UI.btnToggleOutline) {
       UI.btnToggleOutline.setAttribute('aria-pressed', String(State.showOutline));
       UI.btnToggleOutline.textContent = `黒フチ取り: ${State.showOutline ? 'ON' : 'OFF'}`;
@@ -1272,7 +1280,7 @@
     e.target.value = '';
   });
 
-  // --- 14. 外部サンプルGPX (sample_routegpx.gpx) 読込＆不在時待機（背景プレート初期値 OFF） ---
+  // --- 14. 外部サンプルGPX (sample_routegpx.gpx) 読込＆不在時待機（起動時の背景プレートを確実にOFFに固定） ---
   function resetToEmptyWaitingState() {
     State.gpxFileName = '';
     State.rawPointCount = 0;
@@ -1284,11 +1292,7 @@
     State.seekRatio = 0.5;
     State.seekPoint = null;
     State.seekBlinking = false;
-    State.showPlate = false;
-    if (UI.btnTogglePlate) {
-      UI.btnTogglePlate.setAttribute('aria-pressed', 'false');
-      UI.btnTogglePlate.textContent = '背景プレート: OFF';
-    }
+    setPlateState(false);
     if (UI.routeSeekRange) UI.routeSeekRange.value = '500';
     if (UI.seekBadge) UI.seekBadge.textContent = '50%地点';
     if (UI.btnToggleSeekBlink) {
@@ -1304,6 +1308,7 @@
 
   async function loadSampleMountainData() {
     if (State.isRecording) return;
+    setPlateState(false);
     try {
       const response = await fetch(CONFIG.SAMPLE_GPX_FILE, { cache: 'no-cache' });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -1318,10 +1323,11 @@
       }
       State.seekRatio = 0.5;
       State.seekBlinking = false;
+      setPlateState(false);
       recalculateBoundsAndDistances();
       applyPreset('br');
       syncAllControlsWithState();
-      setStatus(`サンプル山行データ（${CONFIG.SAMPLE_GPX_FILE}）を読み込みました。`);
+      setStatus(`サンプル山行データ（${CONFIG.SAMPLE_GPX_FILE}）を読み込みました（背景プレート: OFF）。`);
     } catch (_) {
       if (State.trackPoints.length === 0) resetToEmptyWaitingState();
       setStatus('GPXファイル（または保存したプロジェクト .json）をドロップまたは選択して読み込んでください。', false);
@@ -1430,10 +1436,7 @@
   });
 
   on(UI.btnTogglePlate, 'click', () => {
-    State.showPlate = !State.showPlate;
-    UI.btnTogglePlate.setAttribute('aria-pressed', String(State.showPlate));
-    UI.btnTogglePlate.textContent = `背景プレート: ${State.showPlate ? 'ON' : 'OFF'}`;
-    renderPresetThumbnails();
+    setPlateState(!State.showPlate);
   });
 
   on(UI.btnToggleOutline, 'click', () => {
@@ -1542,7 +1545,7 @@
     else if (e.key === 'ArrowDown') { e.preventDefault(); State.view.offsetY += step; }
     else if (e.key === ' ') { e.preventDefault(); if (UI.btnResetAnim) UI.btnResetAnim.click(); }
     else if (e.key === 'g' || e.key === 'G') { e.preventDefault(); if (UI.btnToggleGuide) UI.btnToggleGuide.click(); }
-    else if (e.key === 'p' || e.key === 'P') { e.preventDefault(); if (UI.btnTogglePlate) UI.btnTogglePlate.click(); }
+    else if (e.key === 'p' || e.key === 'P') { e.preventDefault(); setPlateState(!State.showPlate); }
   });
 
   // --- 17. クロマキー対応レンダリングエンジン ---
@@ -1647,7 +1650,7 @@
       ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, CONFIG.CANVAS_W, CONFIG.CANVAS_H);
     }
 
-    if (State.showPlate) {
+    if (State.showPlate === true) {
       const pad = 420 * State.view.scale;
       ctx.save();
       ctx.fillStyle = isChromaKey ? '#12241b' : 'rgba(18, 36, 27, 0.76)';
@@ -1755,7 +1758,7 @@
     if (State.isPageVisible && !State.rafId) State.rafId = requestAnimationFrame(loop);
   });
 
-  // --- 18. 動画＆静止画エクスポート（上部バー＆右パネル下部ボタン両対応） ---
+  // --- 18. 動画＆静止画エクスポート ---
   function getSupportedVideoMime() {
     const list = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'];
     for (const m of list) {
@@ -1890,7 +1893,7 @@
       const val = parseAndValidateProjectJson(JSON.stringify(mockProject));
       projectTestPassed = val.view.scale === 3.0 && val.style.markerColor === '#ff453a' && val.style.showPlate === false && !({}).polluted;
     } catch (_) { projectTestPassed = false; }
-    assert('プロジェクトJSON検証・Prototype Pollution防御', projectTestPassed);
+    assert('プロジェクトJSON検証・初期プレートOFF検証・Prototype Pollution防御', projectTestPassed);
 
     const mime = getSupportedVideoMime();
     assert(`MediaRecorder 高ビットレート録画 (${mime || '未対応'})`, Boolean(mime));
@@ -1906,7 +1909,8 @@
     releaseRecordingMemory();
   });
 
-  // --- 初期起動 ---
+  // --- 初期起動（起動直後に確実に背景プレートOFFを強制適用） ---
+  setPlateState(false);
   loadSampleMountainData();
   State.rafId = requestAnimationFrame(loop);
 })();
