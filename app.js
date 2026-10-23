@@ -126,7 +126,7 @@
     testBox: document.getElementById('testBox')
   });
 
-  // --- 4. アプリケーション状態管理 ---
+  // --- 4. アプリケーション状態管理（起動時の背景プレート showPlate は false = OFF） ---
   const State = {
     loadSessionId: 0,
     gpxFileName: '',
@@ -143,7 +143,7 @@
     lineColor: '#ffffff',
     markerColor: '#ff453a',
     markerRgb: { r: 255, g: 69, b: 58 },
-    showPlate: true,
+    showPlate: false,
     showOutline: true,
     showGuide: true,
     bounds: {
@@ -578,7 +578,6 @@
     if (xmlText.length > CONFIG.MAX_XML_LENGTH) {
       throw new Error('XMLサイズが上限を超えています。');
     }
-    // BOMおよび先頭の空白・改行を除去（DOMParserが先頭空白で構文エラーになるのを防止）
     const cleaned = xmlText.replace(/^\uFEFF/, '').trimStart();
     if (/<!(DOCTYPE|ENTITY)\b/i.test(cleaned)) {
       throw new Error('DOCTYPEまたはENTITY宣言を含むXMLは読み込めません。');
@@ -586,9 +585,6 @@
     return cleaned;
   }
 
-  /**
-   * 名前空間プレフィックス（gpx:trkpt等）の有無に関わらず確実に要素リストを取得する
-   */
   function getXmlElements(xmlDoc, tagName) {
     let list = Array.from(xmlDoc.getElementsByTagName(tagName));
     if (list.length === 0 && typeof xmlDoc.getElementsByTagNameNS === 'function') {
@@ -606,7 +602,6 @@
       const lowerName = (file.name || '').toLowerCase();
       const mime = (file.type || '').toLowerCase();
 
-      // 画像ファイルの判定
       if (mime.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(lowerName)) {
         if (file.size > CONFIG.MAX_PHOTO_BYTES) {
           setStatus(`エラー: 画像「${file.name}」が上限(30MB)を超えています。`, true);
@@ -640,7 +635,6 @@
         continue;
       }
 
-      // テキスト系ファイル（GPX または プロジェクトJSON）の読み取りと自動判別
       if (file.size > CONFIG.MAX_GPX_BYTES) {
         setStatus(`エラー: ファイル「${file.name}」が上限サイズ(25MB)を超えています。`, true);
         continue;
@@ -651,7 +645,6 @@
         if (currentSession !== State.loadSessionId) return;
         const trimmed = rawText.replace(/^\uFEFF/, '').trimStart();
 
-        // A. プロジェクトJSONの判定（拡張子 .json または先頭が '{' でPROJECT_MAGICを含む）
         if (lowerName.endsWith('.json') || mime === 'application/json' || (trimmed.startsWith('{') && trimmed.includes(CONFIG.PROJECT_MAGIC))) {
           const validated = parseAndValidateProjectJson(trimmed);
           await applyValidatedProject(validated, currentSession);
@@ -659,7 +652,6 @@
           continue;
         }
 
-        // B. GPX（XML）の判定・解析
         const safeText = sanitizeXmlString(trimmed);
         const xml = new DOMParser().parseFromString(safeText, 'text/xml');
         if (xml.querySelector('parsererror')) {
@@ -679,7 +671,6 @@
         }
 
         const wptNodes = getXmlElements(xml, 'wpt');
-        // trkptが無くwptのみが2点以上ある特殊なGPXにも対応
         if (rawPts.length < 2 && wptNodes.length >= 2) {
           for (let i = 0; i < wptNodes.length; i++) {
             const lat = parseFloat(wptNodes[i].getAttribute('lat'));
@@ -731,7 +722,6 @@
     if (UI.fileInput) UI.fileInput.value = '';
   }
 
-  // --- 最優先でファイル選択＆ドラッグ＆ドロップイベントをバインド ---
   on(UI.fileInput, 'change', (e) => processUploadedFiles(e.target.files));
   on(UI.btnOpenFile, 'click', () => {
     if (!State.isRecording && UI.fileInput) UI.fileInput.click();
@@ -740,7 +730,6 @@
     if (!State.isRecording && UI.fileInput) UI.fileInput.click();
   });
 
-  // ドロップイベントをdocument全体・fileZone・previewContainerのすべてで確実に捕捉
   function handleDragOver(e) {
     e.preventDefault();
     e.stopPropagation();
@@ -1102,7 +1091,7 @@
       markerColor: isValidHexColor(st.markerColor) ? st.markerColor.toLowerCase() : '#ff453a',
       lineWidth: clampNumber(st.lineWidth, 1, 16, 5),
       fontSize: Math.round(clampNumber(st.fontSize, 11, 38, 20)),
-      showPlate: st.showPlate !== false,
+      showPlate: Boolean(st.showPlate),
       showOutline: st.showOutline !== false
     };
 
@@ -1283,7 +1272,7 @@
     e.target.value = '';
   });
 
-  // --- 14. 外部サンプルGPX (sample_routegpx.gpx) 読込＆不在時待機 ---
+  // --- 14. 外部サンプルGPX (sample_routegpx.gpx) 読込＆不在時待機（背景プレート初期値 OFF） ---
   function resetToEmptyWaitingState() {
     State.gpxFileName = '';
     State.rawPointCount = 0;
@@ -1295,6 +1284,11 @@
     State.seekRatio = 0.5;
     State.seekPoint = null;
     State.seekBlinking = false;
+    State.showPlate = false;
+    if (UI.btnTogglePlate) {
+      UI.btnTogglePlate.setAttribute('aria-pressed', 'false');
+      UI.btnTogglePlate.textContent = '背景プレート: OFF';
+    }
     if (UI.routeSeekRange) UI.routeSeekRange.value = '500';
     if (UI.seekBadge) UI.seekBadge.textContent = '50%地点';
     if (UI.btnToggleSeekBlink) {
@@ -1894,7 +1888,7 @@
         style: { lineColor: '#529e78', markerColor: 'invalid' }
       };
       const val = parseAndValidateProjectJson(JSON.stringify(mockProject));
-      projectTestPassed = val.view.scale === 3.0 && val.style.markerColor === '#ff453a' && !({}).polluted;
+      projectTestPassed = val.view.scale === 3.0 && val.style.markerColor === '#ff453a' && val.style.showPlate === false && !({}).polluted;
     } catch (_) { projectTestPassed = false; }
     assert('プロジェクトJSON検証・Prototype Pollution防御', projectTestPassed);
 
