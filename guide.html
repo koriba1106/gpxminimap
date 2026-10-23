@@ -3,71 +3,313 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- セキュリティポリシー: 外部通信やインラインスクリプトを遮断し、style.cssとインラインスタイル/SVGのみ許可 -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none';">
-  <title>動画合成ベストプラクティス＆編集ソフト別操作ガイド - GPX Route Studio</title>
-  <link rel="stylesheet" href="style.css">
+  <title>使い方＆動画合成ガイド - GPX Route Studio Workstation</title>
+  <link rel="stylesheet" href="style.css?v=20261023_2">
   <style>
     /* ==========================================================================
-       ガイドサイト専用 拡張スタイル（style.cssのうぐいす色テーマを継承）
+       ガイドページ専用スタイル（style.cssのoverflow:hiddenを解除し縦スクロール可能に）
        ========================================================================== */
-    .guide-grid {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 24px;
-      margin-top: 20px;
+    html, body {
+      height: auto !important;
+      overflow-y: auto !important;
+      overflow-x: hidden !important;
+      user-select: text !important;
+      background: var(--bg-app, #e4ece8);
+      font-size: 14px;
+      line-height: 1.6;
     }
 
-    /* 編集ソフト別のカードレイアウト */
-    .software-card {
-      background: #fff;
-      border: 1px solid var(--line);
-      border-radius: 20px;
-      padding: clamp(18px, 3vw, 28px);
-      box-shadow: 0 5px 22px rgba(25, 51, 38, .04);
+    .guide-container {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px 20px 60px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
     }
 
-    .software-head {
+    /* 上部スティッキーナビゲーションバー */
+    .guide-header {
+      position: sticky;
+      top: 12px;
+      z-index: 100;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--line-strong, #94b8a6);
+      border-radius: 12px;
+      padding: 12px 20px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       flex-wrap: wrap;
       gap: 12px;
-      padding-bottom: 14px;
-      border-bottom: 2px solid var(--pale);
-      margin-bottom: 18px;
+      box-shadow: 0 8px 24px rgba(19, 57, 38, 0.08);
     }
 
-    .software-title {
+    .guide-nav {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 8px;
+      flex-wrap: wrap;
     }
 
-    .software-title h2 {
-      font-size: 1.25rem;
+    .nav-anchor {
+      text-decoration: none;
+      color: var(--deep, #133926);
+      background: var(--pale, #ebf5f0);
+      border: 1px solid var(--line, #c5dbd0);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12.5px;
+      font-weight: 700;
+      transition: 0.15s;
+    }
+    .nav-anchor:hover {
+      background: var(--uguisu-soft, #dff0e7);
+      border-color: var(--uguisu, #3b8a64);
+    }
+
+    .btn-back-app {
+      text-decoration: none;
+      background: var(--uguisu, #3b8a64);
+      color: #ffffff;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 2px 8px rgba(59, 138, 100, 0.3);
+      transition: background-color 0.15s;
+    }
+    .btn-back-app:hover {
+      background: var(--uguisu-hover, #2d7050);
+    }
+
+    /* セクション共通カード */
+    .guide-section {
+      background: #ffffff;
+      border: 1px solid var(--line, #c5dbd0);
+      border-radius: 16px;
+      padding: 28px;
+      box-shadow: 0 4px 18px rgba(19, 57, 38, 0.04);
+    }
+
+    .sec-title-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding-bottom: 14px;
+      border-bottom: 2px solid var(--pale, #ebf5f0);
+      margin-bottom: 20px;
+    }
+
+    .sec-title-bar h2 {
       margin: 0;
-      color: var(--deep);
+      font-size: 1.3rem;
+      color: var(--deep, #133926);
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
 
-    .recommend-tag {
-      background: var(--uguisu);
-      color: #fff;
+    .sec-badge {
+      background: var(--uguisu, #3b8a64);
+      color: #ffffff;
       padding: 4px 12px;
       border-radius: 999px;
-      font-size: .8rem;
+      font-size: 12px;
       font-weight: 700;
     }
 
-    .card-body {
+    /* 1. 初見向け「何ができるか」3カラムカード */
+    .feature-cards {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(320px, 1.15fr);
-      gap: 24px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+
+    .feature-card {
+      background: var(--bg-panel, #f7faf8);
+      border: 1px solid var(--line, #c5dbd0);
+      border-radius: 12px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .feature-visual {
+      height: 120px;
+      background: #181c1a;
+      border-radius: 8px;
+      border: 1px solid #353f3a;
+      display: grid;
+      place-items: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .feature-card h3 {
+      margin: 0;
+      font-size: 1.02rem;
+      color: var(--deep, #133926);
+    }
+
+    .feature-card p {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted, #52695d);
+    }
+
+    /* 2. ワークステーション3ペイン画面解剖図 */
+    .ui-anatomy {
+      background: #1e2421;
+      border: 2px solid #35423c;
+      border-radius: 12px;
+      padding: 14px;
+      color: #e2ece7;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 12px;
+    }
+
+    .anatomy-topbar {
+      background: #2b332f;
+      border: 1px solid #45524b;
+      border-radius: 8px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12.5px;
+    }
+
+    .anatomy-panes {
+      display: grid;
+      grid-template-columns: 1fr 1.4fr 1fr;
+      gap: 12px;
+    }
+
+    .anatomy-pane {
+      background: #262e2a;
+      border: 1px solid #45524b;
+      border-radius: 8px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .anatomy-pane.center-pane {
+      background: #141816;
+      border-color: #529e78;
+    }
+
+    .pane-tag {
+      display: inline-block;
+      background: var(--uguisu, #3b8a64);
+      color: #fff;
+      font-weight: 700;
+      font-size: 11.5px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      align-self: flex-start;
+    }
+
+    .pane-list {
+      margin: 0;
+      padding-left: 18px;
+      font-size: 12.5px;
+      color: #c8d8d0;
+      display: grid;
+      gap: 6px;
+    }
+
+    .pane-list b {
+      color: #ffffff;
+    }
+
+    /* 3. かんたん4ステップ操作フロー */
+    .workflow-steps {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+    }
+
+    .wf-card {
+      background: var(--pale, #ebf5f0);
+      border: 1px solid var(--line-strong, #94b8a6);
+      border-radius: 12px;
+      padding: 16px;
+      position: relative;
+    }
+
+    .wf-num {
+      display: inline-block;
+      background: var(--deep, #133926);
+      color: #ffffff;
+      font-weight: 800;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-bottom: 8px;
+    }
+
+    .wf-card h3 {
+      margin: 0 0 6px;
+      font-size: 1rem;
+      color: var(--deep, #133926);
+    }
+
+    .wf-card p {
+      margin: 0;
+      font-size: 12.5px;
+      color: var(--ink, #14281e);
+    }
+
+    /* 4. 動画編集ソフト別キャプチャ図解 */
+    .software-list {
+      display: grid;
+      gap: 22px;
+    }
+
+    .sw-block {
+      border: 1px solid var(--line, #c5dbd0);
+      border-radius: 14px;
+      padding: 20px;
+      background: var(--bg-panel, #f7faf8);
+    }
+
+    .sw-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line, #c5dbd0);
+    }
+
+    .sw-head h3 {
+      margin: 0;
+      font-size: 1.15rem;
+      color: var(--deep, #133926);
+    }
+
+    .sw-body {
+      display: grid;
+      grid-template-columns: 1fr 1.15fr;
+      gap: 22px;
       align-items: center;
     }
 
-    /* 手順リスト */
-    .step-list {
+    .step-ol {
       margin: 0;
       padding: 0;
       list-style: none;
@@ -75,93 +317,73 @@
       gap: 12px;
     }
 
-    .step-item {
+    .step-li {
       display: grid;
       grid-template-columns: 28px 1fr;
       gap: 10px;
       align-items: start;
-      font-size: .92rem;
+      font-size: 13.5px;
     }
 
-    .step-num {
+    .step-circle {
       width: 28px;
       height: 28px;
-      border-radius: 8px;
-      background: var(--pale);
-      color: var(--deep);
-      font-weight: 700;
+      border-radius: 7px;
+      background: #ffffff;
+      border: 1.5px solid var(--uguisu, #3b8a64);
+      color: var(--deep, #133926);
+      font-weight: 800;
       display: grid;
       place-items: center;
-      font-size: .85rem;
-      border: 1px solid var(--line);
-    }
-
-    .step-text strong {
-      color: var(--deep);
-      display: block;
-      margin-bottom: 2px;
-    }
-
-    .step-text span {
-      color: var(--muted);
-      font-size: .85rem;
+      font-size: 13px;
     }
 
     .param-box {
       margin-top: 14px;
-      background: var(--paper);
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 12px 14px;
-      font-size: .85rem;
-    }
-
-    .param-box strong {
-      color: var(--deep);
-      display: block;
-      margin-bottom: 6px;
+      background: #ffffff;
+      border: 1px solid var(--line, #c5dbd0);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 12.5px;
     }
 
     .param-grid {
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 6px 12px;
-      color: var(--muted);
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 12px;
+      margin-top: 4px;
+      color: var(--muted, #52695d);
     }
 
-    /* ==========================================================================
-       疑似キャプチャUI（編集ソフトの実際の操作画面を模したダークウィンドウ）
-       ========================================================================== */
+    /* 疑似編集ソフトウィンドウ（キャプチャ図解） */
     .mock-window {
       background: #181a1f;
-      border-radius: 14px;
+      border-radius: 12px;
       border: 1px solid #2e3440;
       overflow: hidden;
       color: #e5e9f0;
-      font-family: system-ui, -apple-system, sans-serif;
-      box-shadow: 0 12px 32px rgba(0, 0, 0, .22);
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.2);
       user-select: none;
     }
 
     .mock-titlebar {
       background: #232731;
-      padding: 8px 14px;
+      padding: 7px 12px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       border-bottom: 1px solid #323846;
-      font-size: .78rem;
+      font-size: 11.5px;
       color: #9ba3b0;
     }
 
     .window-dots {
       display: flex;
-      gap: 6px;
+      gap: 5px;
     }
-
     .window-dots i {
-      width: 10px;
-      height: 10px;
+      width: 9px;
+      height: 9px;
       border-radius: 50%;
       display: inline-block;
     }
@@ -171,11 +393,10 @@
 
     .mock-workspace {
       display: grid;
-      grid-template-columns: 1.2fr 1fr;
+      grid-template-columns: 1.15fr 1fr;
       border-bottom: 1px solid #323846;
     }
 
-    /* 編集ソフト内プレビューモニター */
     .mock-monitor {
       position: relative;
       background: linear-gradient(160deg, #2b4c65 0%, #3d6a58 55%, #2a3b32 100%);
@@ -194,39 +415,33 @@
       position: absolute;
       top: 6px;
       left: 8px;
-      background: rgba(0,0,0,.55);
+      background: rgba(0, 0, 0, 0.6);
       color: #fff;
-      font-size: .68rem;
+      font-size: 10.5px;
       padding: 2px 6px;
       border-radius: 4px;
     }
 
-    /* ミニマップ合成イメージ */
-    .mock-minimap {
+    .mock-minimap-clean {
       width: 68px;
       height: 68px;
-      background: rgba(18, 36, 27, 0.85);
-      border: 1.5px solid #d0e8dc;
-      border-radius: 8px;
       position: relative;
-      box-shadow: 0 4px 10px rgba(0,0,0,.4);
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.85));
     }
 
-    /* 編集ソフト内インスペクター（設定パネル） */
     .mock-inspector {
       background: #1e222a;
       border-left: 1px solid #323846;
       padding: 10px 12px;
-      font-size: .75rem;
+      font-size: 11.5px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 7px;
     }
 
     .inspector-title {
       font-weight: 700;
       color: #64d2ff;
-      font-size: .78rem;
       border-bottom: 1px solid #2e3440;
       padding-bottom: 4px;
     }
@@ -241,63 +456,27 @@
 
     .mock-pill {
       background: #2b313d;
-      border: 1px solid #4c566a;
-      padding: 2px 8px;
+      border: 1px solid #ffbd2e;
+      padding: 2px 7px;
       border-radius: 4px;
-      font-size: .72rem;
+      font-size: 11px;
       color: #fff;
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: 4px;
     }
 
-    .mock-pill.highlight {
-      border-color: #ffbd2e;
-      box-shadow: 0 0 0 2px rgba(255, 189, 46, .25);
-    }
-
-    .swatch-green {
-      width: 11px;
-      height: 11px;
-      background: #00ff00;
-      border-radius: 2px;
-      border: 1px solid #fff;
-      display: inline-block;
-    }
-
-    .mock-slider-bar {
-      height: 5px;
-      background: #323846;
-      border-radius: 3px;
-      position: relative;
-      flex: 1;
-    }
-    .mock-slider-fill {
-      height: 100%;
-      background: #529e78;
-      border-radius: 3px;
-    }
-    .mock-slider-thumb {
-      width: 9px;
-      height: 9px;
-      border-radius: 50%;
-      background: #fff;
-      position: absolute;
-      top: -2px;
-    }
-
-    /* タイムライン図解領域 */
     .mock-timeline {
       background: #14161b;
-      padding: 10px 12px;
-      font-size: .73rem;
+      padding: 9px 12px;
+      font-size: 11.5px;
       display: grid;
-      gap: 6px;
+      gap: 5px;
     }
 
     .track-row {
       display: grid;
-      grid-template-columns: 52px 1fr;
+      grid-template-columns: 50px 1fr;
       gap: 8px;
       align-items: center;
     }
@@ -305,95 +484,60 @@
     .track-head {
       background: #232731;
       color: #9ba3b0;
-      padding: 4px 6px;
+      padding: 3px 6px;
       border-radius: 4px;
       text-align: center;
       font-weight: 700;
-      font-size: .7rem;
     }
 
     .track-clip {
-      padding: 5px 10px;
-      border-radius: 5px;
+      padding: 4px 10px;
+      border-radius: 4px;
       font-weight: 600;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      color: #fff;
       display: flex;
-      align-items: center;
       justify-content: space-between;
     }
 
-    .clip-overlay {
-      background: linear-gradient(90deg, #6b4c9a, #8862c2);
-      border: 1.5px solid #b794f4;
-      color: #fff;
-      width: 75%;
-      margin-left: 10%;
-    }
-
-    .clip-chroma {
-      background: linear-gradient(90deg, #1e6b45, #2b8a5b);
-      border: 1.5px solid #529e78;
-      color: #fff;
-      width: 75%;
-      margin-left: 10%;
-    }
-
-    .clip-main {
-      background: linear-gradient(90deg, #2b5876, #4e4376);
-      border: 1px solid #6495ed;
-      color: #e0eaf5;
-      width: 100%;
-    }
-
-    /* スピル防止の比較解説ボックス */
-    .comparison-grid {
+    /* ショートカット＆Tips表 */
+    .tips-grid {
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 16px;
-      margin-top: 14px;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
     }
 
-    .comp-box {
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 16px;
-      background: var(--paper);
+    .kbd-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
     }
-
-    .comp-box.good {
-      background: var(--pale);
-      border-color: var(--uguisu);
+    .kbd-table th, .kbd-table td {
+      border-bottom: 1px solid var(--line, #c5dbd0);
+      padding: 8px 10px;
+      text-align: left;
     }
-
-    .comp-box h3 {
-      margin: 0 0 8px;
-      font-size: .96rem;
-      color: var(--deep);
+    .kbd-table th {
+      color: var(--deep, #133926);
+      width: 42%;
     }
-
-    .link-btn {
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: .65rem 1.1rem;
-      border-radius: 12px;
-      background: var(--uguisu);
-      color: #fff;
+    kbd {
+      background: var(--pale, #ebf5f0);
+      border: 1px solid var(--line-strong, #94b8a6);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
       font-weight: 700;
-      font-size: .9rem;
-      transition: background-color .15s;
-    }
-    .link-btn:hover {
-      background: var(--uguisu-hover);
+      color: var(--deep, #133926);
     }
 
-    @media (max-width: 860px) {
-      .card-body,
+    @media (max-width: 920px) {
+      .feature-cards,
+      .anatomy-panes,
+      .workflow-steps,
+      .sw-body,
       .mock-workspace,
-      .comparison-grid {
+      .tips-grid {
         grid-template-columns: 1fr;
       }
     }
@@ -401,394 +545,518 @@
 </head>
 <body>
 
-  <div class="app">
-    <!-- ヘッダー -->
-    <header>
+  <div class="guide-container">
+
+    <!-- ==================== スティッキーヘッダー ==================== -->
+    <header class="guide-header">
       <div class="brand">
-        <div class="mark" aria-hidden="true">🎬</div>
+        <div class="mark" aria-hidden="true">📖</div>
         <div>
-          <h1>動画合成ベストプラクティス＆操作ガイド</h1>
-          <p>GPX Route Studio で書き出したルート動画を、お使いの動画編集ソフトで綺麗に合成する手順</p>
+          <span class="brand-name">GPX Route Studio 使い方＆動画合成ガイド</span>
+          <span class="brand-sub">WORKSTATION GUIDE</span>
         </div>
       </div>
-      <div class="header-actions">
-        <a href="index.html" class="link-btn">⬅ ツール本体（GPX Route Studio）へ戻る</a>
-      </div>
+
+      <nav class="guide-nav" aria-label="ページ内目次">
+        <a href="#sec-overview" class="nav-anchor">1. できること</a>
+        <a href="#sec-anatomy" class="nav-anchor">2. 画面の見方</a>
+        <a href="#sec-steps" class="nav-anchor">3. 基本の4ステップ</a>
+        <a href="#sec-video" class="nav-anchor">4. 編集ソフト別・合成手順</a>
+        <a href="#sec-shortcuts" class="nav-anchor">5. 便利ワザ・ショートカット</a>
+      </nav>
+
+      <a href="index.html" class="btn-back-app">⬅ ワークステーション（本体）へ戻る</a>
     </header>
 
-    <!-- 導入ステップ（選び方早見表） -->
-    <div class="steps" aria-label="編集ソフト別の推奨モード早見表">
-      <span class="step">✨ Premiere / DaVinci ➔ 「背景透過 WebM」</span>
-      <span class="step">🟢 CapCut / AviUtl / スマホ ➔ 「グリーンバック」</span>
-      <span class="step">⚫ クロマキー非対応ソフト ➔ 「ブラック背景（スクリーン合成）」</span>
+    <!-- ==================== セクション1: 3秒でわかる！できること3選 ==================== -->
+    <section id="sec-overview" class="guide-section">
+      <div class="sec-title-bar">
+        <h2>⛰️ はじめに：GPX Route Studio でできること</h2>
+        <span class="sec-badge">完全著作権フリー・商用利用OK</span>
+      </div>
+
+      <div class="feature-cards">
+        <!-- カード1 -->
+        <div class="feature-card">
+          <div class="feature-visual">
+            <svg viewBox="0 0 180 100" style="width:100%;height:100%;">
+              <!-- チェッカー背景風 -->
+              <polyline points="25,80 60,65 95,35 130,45 155,20" fill="none" stroke="#000" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+              <polyline points="25,80 60,65 95,35 130,45 155,20" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="95" cy="35" r="18" fill="none" stroke="rgba(255,69,58,0.5)" stroke-width="2.5"/>
+              <circle cx="95" cy="35" r="10" fill="none" stroke="rgba(255,69,58,0.85)" stroke-width="2.5"/>
+              <circle cx="95" cy="35" r="5" fill="#ff453a" stroke="#fff" stroke-width="2"/>
+              <text x="106" y="38" fill="#fff" stroke="#000" stroke-width="3" paint-order="stroke" font-size="11" font-weight="bold">槍ヶ岳 (3180m)</text>
+            </svg>
+          </div>
+          <h3>① 登山ルート線画＆現在地点滅動画の作成</h3>
+          <p>
+            ヤマレコやYAMAP等から取得した <code>.gpx</code> ファイルをドロップするだけで、背景が透明（またはグリーンバック）のルート線画と、現在地を示す点滅アニメーション動画（<code>.webm</code>）を作れます。
+          </p>
+        </div>
+
+        <!-- カード2 -->
+        <div class="feature-card">
+          <div class="feature-visual" style="background: linear-gradient(150deg, #2b4c65 0%, #3d6a58 60%, #1e3329 100%);">
+            <svg viewBox="0 0 180 100" style="width:100%;height:100%;">
+              <polygon points="0,100 50,40 100,80 140,25 180,100" fill="rgba(0,0,0,0.28)"/>
+              <!-- 右下ミニマップ合成 -->
+              <g transform="translate(105, 32)">
+                <polyline points="8,52 22,40 35,22 52,16 64,8" fill="none" stroke="#000" stroke-width="5.5" stroke-linecap="round"/>
+                <polyline points="8,52 22,40 35,22 52,16 64,8" fill="none" stroke="#ffd60a" stroke-width="3" stroke-linecap="round"/>
+                <circle cx="35" cy="22" r="9" fill="none" stroke="#ff453a" stroke-width="2"/>
+                <circle cx="35" cy="22" r="4" fill="#ff453a" stroke="#fff" stroke-width="1.5"/>
+                <text x="42" y="25" fill="#fff" stroke="#000" stroke-width="2.5" paint-order="stroke" font-size="8" font-weight="bold">現在地</text>
+              </g>
+            </svg>
+          </div>
+          <h3>② 登山写真へのミニマップ直接合成（PNG）</h3>
+          <p>
+            GPXと一緒に「山で撮った写真（<code>.jpg</code> / <code>.png</code>）」をドロップすれば、写真の四隅にルート図と現在地を重ねた高画質なフルHD静止画（YouTubeサムネイルやブログ用）を1クリックで保存できます。
+          </p>
+        </div>
+
+        <!-- カード3 -->
+        <div class="feature-card">
+          <div class="feature-visual" style="background: #14281e;">
+            <svg viewBox="0 0 180 100" style="width:100%;height:100%;">
+              <rect x="35" y="22" width="110" height="56" rx="8" fill="#233d30" stroke="#529e78" stroke-width="2"/>
+              <text x="90" y="47" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">💾 project.json</text>
+              <text x="90" y="65" text-anchor="middle" fill="#a3c4b3" font-size="9.5">位置・色・地名を丸ごと保存</text>
+            </svg>
+          </div>
+          <h3>③ プロジェクト保存（.json）でいつでも再開</h3>
+          <p>
+            追加した日本語地名や位置・色・サイズの設定を <code>.json</code> ファイルとして保存できます。長編の登山動画を複数パートに分けて編集する際も、ドロップ1つで前回の続きから即座に再開できます。
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== セクション2: 画面の見方（3ペイン解剖図） ==================== -->
+    <section id="sec-anatomy" class="guide-section">
+      <div class="sec-title-bar">
+        <h2>🖥️ 画面の見方（PC専用 3ペイン・ワークステーション）</h2>
+        <span class="sec-badge">スクロール不要の1画面完結設計</span>
+      </div>
+      <p style="margin-top:0; color:var(--muted);">
+        画面は大きく分けて<b>「上部バー」「左ペイン（位置と地名）」「中央ビューポート（プレビュー）」「右ペイン（色と動画出力）」</b>で構成されています。
+      </p>
+
+      <div class="ui-anatomy" aria-label="ワークステーション画面構成図">
+        <!-- 上部バー -->
+        <div class="anatomy-topbar">
+          <span><b>【上部コマンドバー】</b> 📂 素材選択 ／ サンプル読込 ／ 💾 プロジェクト保存(.json)・再開 ／ 初期化</span>
+          <span><b>【右端】</b> 診断テスト ／ 📷 静止画保存(.png) ／ 🎬 動画書き出し(.webm)</span>
+        </div>
+
+        <!-- 3ペイン -->
+        <div class="anatomy-panes">
+          <!-- 左ペイン -->
+          <div class="anatomy-pane">
+            <span class="pane-tag">【左ペイン】配置 ＆ 地名（Waypoint）管理</span>
+            <ul class="pane-list">
+              <li><b>1. 表示位置プリセット</b>: 「全画面」「右下隅」「左下隅」「右上隅」「左上隅」の5つのミニサムネイルをクリックして配置を即決。</li>
+              <li><b>2. Waypoint直接編集表</b>: プルダウン不要！表の中の<b>「⚡ON/OFF」</b>で任意の複数地点を点滅させ、<b>地名をクリックして直接タイピング変更</b>できます。</li>
+              <li><b>3. 距離比例シーク</b>: スライダーを動かしてルート上の好きな場所を点滅させたり、「＋追加」で新しい地名ピンを立てられます。</li>
+            </ul>
+          </div>
+
+          <!-- 中央ペイン -->
+          <div class="anatomy-pane center-pane">
+            <span class="pane-tag">【中央ペイン】ドロップバー ＆ 16:9 プレビュー画面</span>
+            <ul class="pane-list">
+              <li><b>📂 上部ドロップバー</b>: <code>.gpx</code>・写真・<code>.json</code> をここ（または中央画面のどこでも）にドロップして読み込みます。</li>
+              <li><b>🖱️ マウスドラッグ</b>: ルート図の位置を自由に移動できます。</li>
+              <li><b>🔍 マウスホイール</b>: ルート図を拡大・縮小できます。</li>
+              <li><b>📍 ダブルクリック</b>: 地図上のダブルクリックした場所に新しい地名（Waypoint）を追加できます。</li>
+              <li><b>📏 セーフティ枠ボタン</b>: YouTubeの再生バーやテロップと被らないか確認するガイド枠をON/OFFできます（書き出し動画には写りません）。</li>
+            </ul>
+          </div>
+
+          <!-- 右ペイン -->
+          <div class="anatomy-pane">
+            <span class="pane-tag">【右ペイン】色・アニメ演出・クロマキー出力</span>
+            <ul class="pane-list">
+              <li><b>4. ルート線画＆地名スタイル</b>: カラーチップ（または右端の自由色ピッカー）で線の色を選び、太さや文字サイズを調整します。<b>起動時はスッキリ見やすい「背景プレート: OFF」</b>になっています。</li>
+              <li><b>5. 現在地マーカー＆点滅演出</b>: 「パルス波（同心円）」「ブリージング」「ターゲットスコープ」「ルート定速進行」の4種類から選べます。</li>
+              <li><b>6. 動画合成モード＆書き出し</b>: 編集ソフトに合わせて「背景透過」「グリーンバック」「ブルーバック」「ブラック背景」を選んで動画を保存します。</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== セクション3: 初見でも迷わない！基本の4ステップ ==================== -->
+    <section id="sec-steps" class="guide-section">
+      <div class="sec-title-bar">
+        <h2>🚀 初めての方へ：かんたん4ステップ作成手順</h2>
+        <span class="sec-badge">所要時間：約1分</span>
+      </div>
+
+      <div class="workflow-steps">
+        <div class="wf-card">
+          <span class="wf-num">STEP 1</span>
+          <h3>GPXをドロップする</h3>
+          <p>
+            ヤマレコやYAMAPからダウンロードした <code>.gpx</code> ファイルを画面中央へドラッグ＆ドロップします。<br>
+            <small>※手元にない場合は上部バーの「サンプル読込」でお試しいただけます。</small>
+          </p>
+        </div>
+
+        <div class="wf-card">
+          <span class="wf-num">STEP 2</span>
+          <h3>位置とサイズを決める</h3>
+          <p>
+            左上の5つのサムネイルから<b>「右下隅」</b>などをクリックします。<br>
+            キャンバス上でマウスドラッグして微調整したり、ホイールで大きさを調整できます。
+          </p>
+        </div>
+
+        <div class="wf-card">
+          <span class="wf-num">STEP 3</span>
+          <h3>現在地（点滅）を選ぶ</h3>
+          <p>
+            左ペインのWaypoint表で、点滅させたい山頂や山小屋の<b>「⚡ON」</b>ボタンを押します（<b>Shift＋クリック</b>でその地点だけを単独点滅に切り替えられます）。
+          </p>
+        </div>
+
+        <div class="wf-card">
+          <span class="wf-num">STEP 4</span>
+          <h3>動画・画像を書き出す</h3>
+          <p>
+            右ペイン下部（または右上）の<b>「🎬 動画書き出し (.webm)」</b>を押すと、指定秒数（初期5秒）のアニメーション動画がPCに保存されます。
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== セクション4: 編集ソフト別の動画合成ベストプラクティス ==================== -->
+    <section id="sec-video" class="guide-section">
+      <div class="sec-title-bar">
+        <h2>🎬 他の動画に取り込む方法（動画編集ソフト別ベストプラクティス）</h2>
+        <span class="sec-badge">クロマキー・スピル防止対応済</span>
+      </div>
+
+      <div class="software-list">
+
+        <!-- パターンA: Premiere Pro / DaVinci Resolve / Final Cut Pro -->
+        <article class="sw-block">
+          <div class="sw-head">
+            <h3>A. Premiere Pro / DaVinci Resolve / Final Cut Pro をお使いの場合</h3>
+            <span class="sec-badge">推奨モード：背景透過（WebMアルファ）</span>
+          </div>
+
+          <div class="sw-body">
+            <div>
+              <ol class="step-ol">
+                <li class="step-li">
+                  <span class="step-circle">1</span>
+                  <div>
+                    <strong>出力背景を「背景透過（WebMアルファ）」のまま書き出す</strong><br>
+                    初期設定のまま（背景プレート：OFF、黒フチ取り：ON）で <code>.webm</code> 動画を書き出します。
+                  </div>
+                </li>
+                <li class="step-li">
+                  <span class="step-circle">2</span>
+                  <div>
+                    <strong>タイムラインの「V2（上段トラック）」に重ねて配置する</strong><br>
+                    V1（下段）の登山映像の上に、書き出した <code>.webm</code> ファイルをドラッグして置きます。
+                  </div>
+                </li>
+                <li class="step-li">
+                  <span class="step-circle">3</span>
+                  <div>
+                    <strong>クロマキー操作は一切不要！そのまま綺麗に透過されます</strong><br>
+                    動画自体に透明度（アルファチャンネル）が入っているため、置いた瞬間にルート線画と波紋だけが登山映像の上にクッキリ浮き出ます。
+                  </div>
+                </li>
+              </ol>
+
+              <div class="param-box">
+                <strong>💡 おすすめ設定ポイント</strong>
+                <div class="param-grid">
+                  <span>・背景プレート: <b>OFF（線画のみ）または ON</b></span>
+                  <span>・編集ソフトの合成モード: <b>通常 (Normal)</b></span>
+                  <span>・クロマキーエフェクト: <b>不要</b></span>
+                  <span>・WebM非対応の旧版ソフト: <b>下の「B. グリーンバック」を使用</b></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Premiere / DaVinci 疑似キャプチャ画面 -->
+            <div class="mock-window" aria-label="Premiere Pro / DaVinci Resolve での透過WebM配置イメージ">
+              <div class="mock-titlebar">
+                <div class="window-dots"><i class="dot-r"></i><i class="dot-y"></i><i class="dot-g"></i></div>
+                <span>Timeline &amp; Program Monitor — アルファ透過WebM合成（背景プレートOFF）</span>
+                <span>1920×1080</span>
+              </div>
+              <div class="mock-workspace">
+                <div class="mock-monitor">
+                  <span class="mock-monitor-label">プログラムモニター（V1映像の上に線画だけが透過合成される）</span>
+                  <svg viewBox="0 0 200 110" style="position:absolute;inset:0;width:100%;height:100%;opacity:0.35;">
+                    <polygon points="0,110 45,45 95,85 145,25 200,110" fill="#1b3326"/>
+                    <polygon points="80,110 130,40 185,90 200,70 200,110" fill="#0f2419"/>
+                  </svg>
+                  <!-- 背景プレートOFFのクリーンな右下ミニマップ -->
+                  <div class="mock-minimap-clean">
+                    <svg viewBox="0 0 60 60" style="width:100%;height:100%;">
+                      <polyline points="8,50 20,38 30,22 44,16 54,8" fill="none" stroke="#000" stroke-width="5" stroke-linecap="round"/>
+                      <polyline points="8,50 20,38 30,22 44,16 54,8" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+                      <circle cx="30" cy="22" r="10" fill="none" stroke="rgba(255,69,58,0.65)" stroke-width="2"/>
+                      <circle cx="30" cy="22" r="4.5" fill="#ff453a" stroke="#fff" stroke-width="1.5"/>
+                      <text x="12" y="14" fill="#fff" stroke="#000" stroke-width="2.5" paint-order="stroke" font-size="7.5" font-weight="bold">最高峰</text>
+                    </svg>
+                  </div>
+                </div>
+                <div class="mock-inspector">
+                  <div class="inspector-title">インスペクター (V2: gpx_route.webm)</div>
+                  <div class="inspector-row"><span>合成モード</span><span class="mock-pill">通常 (Normal)</span></div>
+                  <div class="inspector-row"><span>不透明度</span><span>100 %</span></div>
+                  <div class="inspector-row"><span>アルファ透過</span><span style="color:#30d158;font-weight:700;">✔ 自動認識 (Straight)</span></div>
+                  <div class="inspector-row"><span>クロマキー</span><span>OFF (不要)</span></div>
+                </div>
+              </div>
+              <div class="mock-timeline">
+                <div class="track-row">
+                  <div class="track-head">V2 (上)</div>
+                  <div class="track-clip" style="background:linear-gradient(90deg,#6b4c9a,#8862c2);width:75%;margin-left:10%;">
+                    <span>🎞️ gpx_route.webm（背景透過WebM）</span><span>Alpha</span>
+                  </div>
+                </div>
+                <div class="track-row">
+                  <div class="track-head">V1 (下)</div>
+                  <div class="track-clip" style="background:linear-gradient(90deg,#2b5876,#4e4376);">
+                    <span>🏔️ 登山本編映像.mp4</span><span>00:05:00</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- パターンB: CapCut / AviUtl / PowerDirector / VLLO -->
+        <article class="sw-block">
+          <div class="sw-head">
+            <h3>B. CapCut / AviUtl / PowerDirector / Filmora をお使いの場合</h3>
+            <span class="sec-badge">推奨モード：グリーンバック（#00FF00）</span>
+          </div>
+
+          <div class="sw-body">
+            <div>
+              <ol class="step-ol">
+                <li class="step-li">
+                  <span class="step-circle">1</span>
+                  <div>
+                    <strong>出力背景を「グリーンバック（#00FF00）」にして書き出す</strong><br>
+                    本ツールはグリーンバック選択時、波紋や文字のフチが緑色と混ざって汚くなる現象（スピル）を<b>自動で防止（不透明リング＋黒ガード枠化）</b>して出力します。
+                  </div>
+                </li>
+                <li class="step-li">
+                  <span class="step-circle">2</span>
+                  <div>
+                    <strong>「はめ込み合成（PIP）」で重ねて「クロマキー」を開く</strong><br>
+                    本編動画の上に配置し、メニューの<b>「切り抜き」➔「クロマキー」</b>を選択します。
+                  </div>
+                </li>
+                <li class="step-li">
+                  <span class="step-circle">3</span>
+                  <div>
+                    <strong>スポイトで緑色を選び、「強度」を 20〜30 に上げる</strong><br>
+                    カラーピッカー（スポイト）を緑色の背景に合わせ、<b>強度スライダーを 20〜30 程度</b>にすると、緑背景だけがシャープに消えます。
+                  </div>
+                </li>
+              </ol>
+
+              <div class="param-box">
+                <strong>🎛️ クロマキー推奨設定値（CapCut等の目安）</strong>
+                <div class="param-grid">
+                  <span>・スポイト選択色: <b>緑 (#00FF00)</b></span>
+                  <span>・強度 (濃度): <b>20 〜 35</b></span>
+                  <span>・シャドウ (境界補正): <b>5 〜 10</b></span>
+                  <span>・緑色の線を使いたい時: <b>「ブルーバック」で出力</b></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- CapCut クロマキー疑似キャプチャ画面 -->
+            <div class="mock-window" aria-label="CapCutでのクロマキー設定イメージ">
+              <div class="mock-titlebar">
+                <div class="window-dots"><i class="dot-r"></i><i class="dot-y"></i><i class="dot-g"></i></div>
+                <span>CapCut — 切り抜き &gt; クロマキー抽出イメージ</span>
+                <span>Chroma Key: ON</span>
+              </div>
+              <div class="mock-workspace">
+                <div class="mock-monitor" style="background:linear-gradient(135deg,#1f4037 0%,#4b6cb7 100%);">
+                  <span class="mock-monitor-label">スポイトで緑を選択 ➔ 強度25で背景消去</span>
+                  <div style="position:absolute;top:36%;left:30%;width:30px;height:30px;border:2px solid #fff;border-radius:50%;background:#00ff00;display:grid;place-items:center;font-size:11px;box-shadow:0 0 0 3px rgba(0,0,0,0.5);">🖊️</div>
+                  <div class="mock-minimap-clean">
+                    <svg viewBox="0 0 60 60" style="width:100%;height:100%;">
+                      <polyline points="8,50 20,38 30,22 44,16 54,8" fill="none" stroke="#000" stroke-width="5.5" stroke-linecap="round"/>
+                      <polyline points="8,50 20,38 30,22 44,16 54,8" fill="none" stroke="#ffd60a" stroke-width="3" stroke-linecap="round"/>
+                      <circle cx="44" cy="16" r="9" fill="none" stroke="#000" stroke-width="3.5"/>
+                      <circle cx="44" cy="16" r="9" fill="none" stroke="#ff453a" stroke-width="2"/>
+                      <circle cx="44" cy="16" r="4.5" fill="#ff453a" stroke="#fff" stroke-width="1.5"/>
+                      <text x="10" y="15" fill="#fff" stroke="#000" stroke-width="2.5" paint-order="stroke" font-size="7.5" font-weight="bold">大谷乗越</text>
+                    </svg>
+                  </div>
+                </div>
+                <div class="mock-inspector">
+                  <div class="inspector-title">切り抜き &gt; クロマキー</div>
+                  <div class="inspector-row"><span>カラーピッカー</span><span class="mock-pill">🟢 #00FF00</span></div>
+                  <div class="inspector-row"><span>強度 (Intensity)</span><span class="mock-pill">25</span></div>
+                  <div class="inspector-row"><span>シャドウ (Shadow)</span><span>10</span></div>
+                  <div class="inspector-row"><span>スピル防止保護</span><span style="color:#64d2ff;font-weight:700;">✔ 黒フチガード自動適用</span></div>
+                </div>
+              </div>
+              <div class="mock-timeline">
+                <div class="track-row">
+                  <div class="track-head">PIP</div>
+                  <div class="track-clip" style="background:linear-gradient(90deg,#1e6b45,#2b8a5b);width:75%;margin-left:10%;">
+                    <span>🟢 gpx_route_green.webm（クロマキーON: 強度25）</span><span>Chroma</span>
+                  </div>
+                </div>
+                <div class="track-row">
+                  <div class="track-head">Main</div>
+                  <div class="track-clip" style="background:linear-gradient(90deg,#2b5876,#4e4376);">
+                    <span>🏔️ 北アルプス縦走_本編動画.mp4</span><span>00:12:30</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- パターンC: ブラック背景（スクリーン合成） -->
+        <article class="sw-block">
+          <div class="sw-head">
+            <h3>C. クロマキーを使わず1秒で抜く裏技（ブレンド・スクリーン合成）</h3>
+            <span class="sec-badge">推奨モード：ブラック背景（#000000）</span>
+          </div>
+
+          <div class="sw-body">
+            <div>
+              <ol class="step-ol">
+                <li class="step-li">
+                  <span class="step-circle">1</span>
+                  <div>
+                    <strong>出力背景を「ブラック背景（#000000）」にして書き出す</strong><br>
+                    背景プレートがOFF（初期状態）のまま、「ブラック背景」で動画を書き出します。
+                  </div>
+                </li>
+                <li class="step-li">
+                  <span class="step-circle">2</span>
+                  <div>
+                    <strong>編集ソフトの合成（ブレンド）モードを「スクリーン」にする</strong><br>
+                    本編映像の上に重ねて、合成モード（ブレンドモード）から<b>「スクリーン (Screen)」</b>または<b>「比較（明） / 加算」</b>を選びます。
+                  </div>
+                </li>
+                <li class="step-li">
+                  <span class="step-circle">3</span>
+                  <div>
+                    <strong>黒い部分が100%透明になり、発光するような美しい波紋に！</strong><br>
+                    色抜き計算を行わないため、赤いパルス波の半透明グラデーションも一切欠けずに滑らかに合成できます。
+                  </div>
+                </li>
+              </ol>
+            </div>
+
+            <div class="mock-window" aria-label="ブラック背景のスクリーン合成イメージ">
+              <div class="mock-titlebar">
+                <div class="window-dots"><i class="dot-r"></i><i class="dot-y"></i><i class="dot-g"></i></div>
+                <span>Blend Mode — 黒背景スクリーン合成イメージ</span>
+                <span>Mode: Screen</span>
+              </div>
+              <div class="mock-workspace">
+                <div class="mock-monitor">
+                  <span class="mock-monitor-label">黒(#000000)が無視され、白線と光点だけが残る</span>
+                  <div class="mock-minimap-clean">
+                    <svg viewBox="0 0 60 60" style="width:100%;height:100%;">
+                      <polyline points="8,50 20,38 30,22 44,16 54,8" fill="none" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round"/>
+                      <circle cx="20" cy="38" r="11" fill="none" stroke="rgba(255,69,58,0.8)" stroke-width="2"/>
+                      <circle cx="20" cy="38" r="4.5" fill="#ff453a" stroke="#fff" stroke-width="1.5"/>
+                      <text x="26" y="42" fill="#fff" font-size="7.5" font-weight="bold">現在地</text>
+                    </svg>
+                  </div>
+                </div>
+                <div class="mock-inspector">
+                  <div class="inspector-title">ブレンド / 混合モード (Blend)</div>
+                  <div class="inspector-row"><span>描画モード</span><span class="mock-pill">スクリーン (Screen) ▾</span></div>
+                  <div class="inspector-row"><span>代替モード</span><span>比較 (明) / 加算</span></div>
+                  <div class="inspector-row"><span>黒背景 (#000000)</span><span style="color:#30d158;font-weight:700;">✔ 完全透過</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+      </div>
+    </section>
+
+    <!-- ==================== セクション5: PCキーボードショートカット＆便利ワザ ==================== -->
+    <section id="sec-shortcuts" class="guide-section">
+      <div class="sec-title-bar">
+        <h2>⌨️ PC作業が捗るキーボードショートカット ＆ 便利ワザ</h2>
+        <span class="sec-badge">マウス＆キーボード快適操作</span>
+      </div>
+
+      <div class="tips-grid">
+        <div>
+          <table class="kbd-table" aria-label="キーボードショートカット一覧">
+            <thead>
+              <tr>
+                <th>キー / マウス操作</th>
+                <th>動作内容</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><kbd>ドラッグ</kbd> / <kbd>ホイール</kbd></td>
+                <td>ルート図の自由移動 ／ 拡大・縮小</td>
+              </tr>
+              <tr>
+                <td><kbd>ダブルクリック</kbd></td>
+                <td>地図上のクリックした位置に新しい地名（Waypoint）を追加</td>
+              </tr>
+              <tr>
+                <td><kbd>Shift</kbd> + <kbd>⚡ONボタン</kbd></td>
+                <td>Waypoint表でその地点だけを<b>「単独点滅」</b>に一発切り替え</td>
+              </tr>
+              <tr>
+                <td><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd></td>
+                <td>ルート図の位置を 4px 単位で精密に微調整（<kbd>Shift</kbd> 併用で 20px 移動）</td>
+              </tr>
+              <tr>
+                <td><kbd>P</kbd> キー</td>
+                <td>ミニマップ背後の「背景プレート（座布団）」の ON / OFF 切り替え</td>
+              </tr>
+              <tr>
+                <td><kbd>G</kbd> キー</td>
+                <td>位置合わせ用の「16:9 セーフティガイド枠」の ON / OFF 切り替え</td>
+              </tr>
+              <tr>
+                <td><kbd>Space</kbd> キー</td>
+                <td>アニメーション周期を先頭（0秒）にリセットして再生確認</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="feature-card" style="justify-content:center;">
+          <h3>💡 知っておくと便利なTips</h3>
+          <ul class="pane-list" style="color:var(--ink);">
+            <li><b>数値の直接タイピング入力</b>: スケール（%）や線の太さ（px）、録画秒数は、スライダー右横の数値ボックスに直接数字を打ち込んで指定できます。</li>
+            <li><b>座布団プレートを使いたい時</b>: 背景のごちゃついた登山映像の上に重ねる場合は、<kbd>P</kbd> キー（または右ペインの「背景プレート: ON」ボタン）を押すと、半透明のダークプレートが敷かれて文字がさらに読みやすくなります。</li>
+            <li><b>プロジェクトの丸ごとバックアップ</b>: 上部バーの「💾 保存(.json)」を押しておけば、読み込んだ背景写真も含めて1つのJSONファイルに保存され、次回そのままドロップするだけで続きから作業できます。</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <div style="text-align:center; margin-top:8px;">
+      <a href="index.html" class="btn-back-app" style="padding:12px 28px; font-size:15px;">⬅ GPX Route Studio ワークステーション（本体）を開いて始める</a>
     </div>
 
-    <div class="guide-grid">
-
-      <!-- ====================================================================
-           1. Premiere Pro / DaVinci Resolve / Final Cut Pro 向けガイド
-           ==================================================================== -->
-      <article class="software-card">
-        <div class="software-head">
-          <div class="software-title">
-            <span class="badge">PCプロ編集ソフト</span>
-            <h2>Premiere Pro / DaVinci Resolve / Final Cut Pro</h2>
-          </div>
-          <span class="recommend-tag">推奨出力：背景透過（WebMアルファ）</span>
-        </div>
-
-        <div class="card-body">
-          <!-- 左側：操作ステップ説明 -->
-          <div>
-            <ol class="step-list">
-              <li class="step-item">
-                <span class="step-num">1</span>
-                <div class="step-text">
-                  <strong>「背景透過（WebMアルファ）」で動画を書き出す</strong>
-                  <span>GPX Route Studioの合成モードを「背景透過」にし、あらかじめ「右下隅」などのプリセットを選んで `.webm` を保存します。</span>
-                </div>
-              </li>
-              <li class="step-item">
-                <span class="step-num">2</span>
-                <div class="step-text">
-                  <strong>タイムラインの「V2（上段トラック）」に配置する</strong>
-                  <span>V1（下段）の登山本編映像の上に、書き出した `.webm` ファイルをドラッグ＆ドロップして重ねます。</span>
-                </div>
-              </li>
-              <li class="step-item">
-                <span class="step-num">3</span>
-                <div class="step-text">
-                  <strong>エフェクト設定不要でそのまま透過完了！</strong>
-                  <span>アルファチャンネル（透明度情報）が含まれているため、クロマキー設定を一切行うことなく、半透明の座布団や広がるパルス波まで100%綺麗に透過されます。</span>
-                </div>
-              </li>
-            </ol>
-
-            <div class="param-box">
-              <strong>💡 ワンポイント調整（位置やサイズを後から変えたい場合）</strong>
-              <div class="param-grid">
-                <span>・合成モード: <b>通常 (Normal)</b></span>
-                <span>・クロマキー処理: <b>不要 (OFF)</b></span>
-                <span>・フェード演出: <b>前後にディゾルブ 0.5秒</b></span>
-                <span>・旧PremiereでWebM非対応時: <b>グリーンバックを使用</b></span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 右側：実際の操作画面キャプチャイメージ -->
-          <div class="mock-window" aria-label="Premiere Pro / DaVinci Resolveの操作画面イメージ">
-            <div class="mock-titlebar">
-              <div class="window-dots"><i class="dot-r"></i><i class="dot-y"></i><i class="dot-g"></i></div>
-              <span>Timeline &amp; Inspector — アルファ透過合成イメージ</span>
-              <span>1920x1080 30fps</span>
-            </div>
-
-            <div class="mock-workspace">
-              <!-- プログラムモニター（合成結果） -->
-              <div class="mock-monitor">
-                <span class="mock-monitor-label">プログラムモニター (合成プレビュー)</span>
-                <!-- 山の稜線SVG背景 -->
-                <svg viewBox="0 0 200 110" style="position:absolute; inset:0; width:100%; height:100%; opacity:0.35;">
-                  <polygon points="0,110 45,45 95,85 145,25 200,110" fill="#1b3326"/>
-                  <polygon points="80,110 130,40 185,90 200,70 200,110" fill="#0f2419"/>
-                </svg>
-                <!-- 右下ミニマップ -->
-                <div class="mock-minimap">
-                  <svg viewBox="0 0 60 60" style="width:100%; height:100%;">
-                    <polyline points="10,48 22,38 30,22 44,16 52,10" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
-                    <circle cx="30" cy="22" r="9" fill="none" stroke="rgba(255,69,58,0.55)" stroke-width="2"/>
-                    <circle cx="30" cy="22" r="4" fill="#ff453a" stroke="#fff" stroke-width="1.5"/>
-                    <text x="14" y="16" fill="#fff" font-size="7" font-weight="bold">山頂</text>
-                  </svg>
-                </div>
-              </div>
-
-              <!-- エフェクトコントロールパネル -->
-              <div class="mock-inspector">
-                <div class="inspector-title">エフェクトコントロール (V2: gpx_route.webm)</div>
-                <div class="inspector-row">
-                  <span>描画モード (Blend)</span>
-                  <span class="mock-pill highlight">通常 (Normal) ▾</span>
-                </div>
-                <div class="inspector-row">
-                  <span>不透明度 (Opacity)</span>
-                  <span class="mock-pill">100.0 %</span>
-                </div>
-                <div class="inspector-row">
-                  <span>アルファチャンネル</span>
-                  <span style="color:#30d158; font-weight:700;">✔ 自動認識済 (Straight)</span>
-                </div>
-                <div class="inspector-row">
-                  <span>スケール / 位置</span>
-                  <span>100% (960, 540)</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- タイムライントラック図解 -->
-            <div class="mock-timeline">
-              <div class="track-row">
-                <div class="track-head">V2 (上)</div>
-                <div class="track-clip clip-overlay">
-                  <span>🎞️ gpx_route_overlay.webm (背景透過WebM)</span>
-                  <span>Alpha ON</span>
-                </div>
-              </div>
-              <div class="track-row">
-                <div class="track-head">V1 (下)</div>
-                <div class="track-clip clip-main">
-                  <span>🏔️ 登山本編映像_槍ヶ岳縦走.mp4 (元動画)</span>
-                  <span>00:05:00</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </article>
-
-      <!-- ====================================================================
-           2. CapCut / AviUtl / スマホアプリ全般（クロマキー合成）向けガイド
-           ==================================================================== -->
-      <article class="software-card">
-        <div class="software-head">
-          <div class="software-title">
-            <span class="badge">PC / スマホ定番</span>
-            <h2>CapCut / PowerDirector / VLLO / AviUtl</h2>
-          </div>
-          <span class="recommend-tag">推奨出力：グリーンバック（#00FF00）</span>
-        </div>
-
-        <div class="card-body">
-          <!-- 左側：操作ステップ説明 -->
-          <div>
-            <ol class="step-list">
-              <li class="step-item">
-                <span class="step-num">1</span>
-                <div class="step-text">
-                  <strong>「グリーンバック（#00FF00）」で動画を書き出す</strong>
-                  <span>合成モードで「グリーンバック」を選択します。（※ルート線やマーカーに緑色を使いたい場合は「ブルーバック」を選択してください）</span>
-                </div>
-              </li>
-              <li class="step-item">
-                <span class="step-num">2</span>
-                <div class="step-text">
-                  <strong>「はめ込み合成（オーバーレイ）」で読み込む</strong>
-                  <span>本編動画の上に重ねて配置し、メニューから<b>「切り抜き」➔「クロマキー」</b>を選択します。</span>
-                </div>
-              </li>
-              <li class="step-item">
-                <span class="step-num">3</span>
-                <div class="step-text">
-                  <strong>カラーピッカー（スポイト）で緑背景を選択し、強度を上げる</strong>
-                  <span>スポイトを緑色の部分に合わせ、<b>「強度（濃度）」を 15〜30 程度</b>に上げると、一瞬で緑背景だけが綺麗に消えます。</span>
-                </div>
-              </li>
-            </ol>
-
-            <div class="param-box">
-              <strong>🎛️ CapCut / クロマキー推奨パラメーター設定値</strong>
-              <div class="param-grid">
-                <span>・キーカラー: <b>緑 (#00FF00) をスポイト</b></span>
-                <span>・強度 (Intensity): <b>20 〜 35</b></span>
-                <span>・シャドウ / 境界補正: <b>5 〜 10</b></span>
-                <span>・スピル除去 (色かぶり補正): <b>10 (任意)</b></span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 右側：クロマキー操作画面キャプチャイメージ -->
-          <div class="mock-window" aria-label="CapCutのクロマキー設定画面イメージ">
-            <div class="mock-titlebar">
-              <div class="window-dots"><i class="dot-r"></i><i class="dot-y"></i><i class="dot-g"></i></div>
-              <span>CapCut / Chroma Key Panel — クロマキー抽出イメージ</span>
-              <span>Chroma Key: Active</span>
-            </div>
-
-            <div class="mock-workspace">
-              <!-- スポイト選択中のモニター画面 -->
-              <div class="mock-monitor" style="background: linear-gradient(135deg, #1f4037 0%, #4b6cb7 100%);">
-                <span class="mock-monitor-label">スポイトで背景の緑を選択</span>
-                <!-- スポイトターゲットリング -->
-                <div style="position:absolute; top:38%; left:32%; width:34px; height:34px; border:2px solid #fff; border-radius:50%; background:#00ff00; box-shadow:0 0 0 3px rgba(0,0,0,.5); display:grid; place-items:center; font-size:12px;">
-                  🖊️
-                </div>
-                <!-- 右下ミニマップ（不透明プレートで緑かぶりゼロ） -->
-                <div class="mock-minimap" style="background:#12241b;">
-                  <svg viewBox="0 0 60 60" style="width:100%; height:100%;">
-                    <polyline points="10,48 22,38 30,22 44,16 52,10" fill="none" stroke="#ffd60a" stroke-width="3" stroke-linecap="round"/>
-                    <circle cx="44" cy="16" r="8" fill="none" stroke="#ff453a" stroke-width="2"/>
-                    <circle cx="44" cy="16" r="4" fill="#ff453a" stroke="#fff" stroke-width="1.5"/>
-                    <text x="8" y="16" fill="#fff" font-size="7" font-weight="bold">穂高岳</text>
-                  </svg>
-                </div>
-              </div>
-
-              <!-- クロマキー設定インスペクター -->
-              <div class="mock-inspector">
-                <div class="inspector-title">切り抜き &gt; クロマキー (Chroma Key)</div>
-                <div class="inspector-row">
-                  <span>カラーピッカー</span>
-                  <span class="mock-pill highlight"><i class="swatch-green"></i> #00FF00</span>
-                </div>
-                <div class="inspector-row">
-                  <span>強度 (Intensity)</span>
-                  <div class="mock-slider-bar">
-                    <div class="mock-slider-fill" style="width:30%;"></div>
-                    <div class="mock-slider-thumb" style="left:28%;"></div>
-                  </div>
-                  <span>25</span>
-                </div>
-                <div class="inspector-row">
-                  <span>シャドウ (Shadow)</span>
-                  <div class="mock-slider-bar">
-                    <div class="mock-slider-fill" style="width:12%;"></div>
-                    <div class="mock-slider-thumb" style="left:10%;"></div>
-                  </div>
-                  <span>10</span>
-                </div>
-                <div class="inspector-row">
-                  <span>スピル防止保護</span>
-                  <span style="color:#64d2ff; font-weight:700;">✔ 不透明座布団で保護済</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- タイムライン -->
-            <div class="mock-timeline">
-              <div class="track-row">
-                <div class="track-head">PIP</div>
-                <div class="track-clip clip-chroma">
-                  <span>🟢 gpx_route_green.webm (クロマキー ON: 強度25)</span>
-                  <span>Chroma</span>
-                </div>
-              </div>
-              <div class="track-row">
-                <div class="track-head">Main</div>
-                <div class="track-clip clip-main">
-                  <span>🏔️ 北アルプス縦走_本編動画.mp4</span>
-                  <span>00:12:30</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </article>
-
-      <!-- ====================================================================
-           3. ブラック背景（スクリーン合成） / iMovie 向けガイド
-           ==================================================================== -->
-      <article class="software-card">
-        <div class="software-head">
-          <div class="software-title">
-            <span class="badge">クロマキー不要の軽量合成</span>
-            <h2>iMovie / VN / 簡易編集アプリ（ブレンド合成）</h2>
-          </div>
-          <span class="recommend-tag">推奨出力：ブラック背景（#000000）</span>
-        </div>
-
-        <div class="card-body">
-          <div>
-            <ol class="step-list">
-              <li class="step-item">
-                <span class="step-num">1</span>
-                <div class="step-text">
-                  <strong>「ブラック背景（#000000）」＋「背景プレート: OFF」で書き出す</strong>
-                  <span>GPX Route Studioで「ブラック背景」を選び、「背景プレート: OFF」にして線画と地名・マーカーだけを黒背景で書き出します。</span>
-                </div>
-              </li>
-              <li class="step-item">
-                <span class="step-num">2</span>
-                <div class="step-text">
-                  <strong>編集ソフトのブレンド（合成モード）を「スクリーン」にする</strong>
-                  <span>本編動画の上に重ね、ブレンド（混合モード）から<b>「スクリーン (Screen)」</b>または<b>「比較（明） / 加算」</b>を選ぶだけで、黒い背景が完全に透明になります。</span>
-                </div>
-              </li>
-              <li class="step-item">
-                <span class="step-num">3</span>
-                <div class="step-text">
-                  <strong>色抜けやエッジのギザギザが一切出ない裏技！</strong>
-                  <span>クロマキー計算を使わず光の加算だけで合成するため、赤いパルス波のグラデーションも非常に滑らかに合成できます。（※iMovieの場合は「グリーン/ブルースクリーン」機能も標準搭載されています）</span>
-                </div>
-              </li>
-            </ol>
-          </div>
-
-          <!-- 右側：ブレンドモード選択画面キャプチャイメージ -->
-          <div class="mock-window" aria-label="ブレンドモード（スクリーン合成）の操作画面イメージ">
-            <div class="mock-titlebar">
-              <div class="window-dots"><i class="dot-r"></i><i class="dot-y"></i><i class="dot-g"></i></div>
-              <span>Blend Mode — 黒背景スクリーン合成イメージ</span>
-              <span>Screen Blend</span>
-            </div>
-
-            <div class="mock-workspace">
-              <div class="mock-monitor">
-                <span class="mock-monitor-label">黒背景が透明になり線画だけが浮き出る</span>
-                <div class="mock-minimap" style="background:transparent; border:none; box-shadow:none;">
-                  <svg viewBox="0 0 60 60" style="width:100%; height:100%; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.8));">
-                    <polyline points="10,48 22,38 30,22 44,16 52,10" fill="none" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round"/>
-                    <circle cx="22" cy="38" r="10" fill="none" stroke="rgba(255,69,58,0.75)" stroke-width="2"/>
-                    <circle cx="22" cy="38" r="4.5" fill="#ff453a" stroke="#fff" stroke-width="1.5"/>
-                    <text x="26" y="42" fill="#fff" font-size="7.5" font-weight="bold">現在地</text>
-                  </svg>
-                </div>
-              </div>
-
-              <div class="mock-inspector">
-                <div class="inspector-title">合成 / ブレンドモード (Blend Mode)</div>
-                <div class="inspector-row">
-                  <span>描画モード</span>
-                  <span class="mock-pill highlight">スクリーン (Screen) ▾</span>
-                </div>
-                <div class="inspector-row">
-                  <span>代替モード</span>
-                  <span class="mock-pill">比較 (明) / 加算</span>
-                </div>
-                <div class="inspector-row">
-                  <span>黒色ピクセル (#000)</span>
-                  <span style="color:#30d158; font-weight:700;">✔ 100% 透過消去</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </article>
-
-      <!-- ====================================================================
-           4. 技術解説：なぜGPX Route Studioはクロマキーが綺麗に抜けるのか？
-           ==================================================================== -->
-      <section class="panel">
-        <div class="panel-head">
-          <h2>💡 綺麗に合成するための技術ポイント（クロマキー・スピル防止機構）</h2>
-          <span class="badge">自動最適化機能</span>
-        </div>
-        <p class="meta">
-          一般的な地図アニメーションツールでグリーンバック動画を書き出すと、半透明の黒い座布団やフェードアウトする波紋が背景の緑色（`#00FF00`）と混ざり合ってしまい、動画編集ソフトでクロマキーを抜いた際に「緑色の汚いフチ（スピル）」が残ってしまいます。GPX Route Studioでは以下の自動処理でこれを解決しています。
-        </p>
-
-        <div class="comparison-grid">
-          <div class="comp-box">
-            <h3>❌ 一般的なツールの問題点（半透明と緑の混色）</h3>
-            <p class="meta">
-              ・半透明の座布団プレートが緑背景と混ざり「暗い黄緑色」になるため、クロマキーで抜くとプレートごと消えるか、緑色に濁ってしまいます。<br>
-              ・広がるパルス波の半透明グラデーションの輪郭に、緑色のジャギー（ギザギザのフリンジ）が残ります。
-            </p>
-          </div>
-          <div class="comp-box good">
-            <h3>✅ GPX Route Studioの「スピル防止レンダリング」</h3>
-            <p class="meta">
-              ・グリーン／ブルーバック選択時は、座布団プレートを<b>完全不透明の濃緑墨色（#12241B）</b>へ自動切り替えし、プレート内の文字や波紋を緑背景から100%シールドします。<br>
-              ・プレートOFF時も、波紋の透明度変化を「不透明リングの太さ変化＋黒ガード枠」へ自動変換するため、どんな編集ソフトでもワンクリックでシャープに抜けます。
-            </p>
-          </div>
-        </div>
-      </section>
-
-    </div>
-
-    <footer class="footer">
-      GPX Route Studio Visual Guide — <a href="index.html" style="color:var(--deep); font-weight:700;">ツール本体（index.html）へ戻る</a>
-    </footer>
   </div>
 
 </body>
