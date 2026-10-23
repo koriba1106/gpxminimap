@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src blob: data:; media-src blob:; connect-src 'self'; base-uri 'none'; form-action 'none';">
+  <title>システム自己診断テストスイート - GPX Route Studio</title>
+  <link rel="stylesheet" href="style.css?v=20261023_4">
+</head>
+<body class="test-page-body">
+
+  <div class="test-runner-container">
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark" aria-hidden="true">🔍</div>
+        <span class="brand-name">GPX Route Studio — 独立システム診断スイート</span>
+        <span class="brand-sub">DIAGNOSTICS</span>
+      </div>
+      <div class="topbar-right">
+        <button type="button" id="btnRunDiagnostics" class="btn btn-primary">▶ 診断テストを再実行</button>
+        <a href="index.html" class="btn btn-secondary">⬅ ワークステーション本体へ戻る</a>
+      </div>
+    </header>
+
+    <main class="test-runner-main">
+      <section class="dock-section">
+        <div class="section-header">
+          <h2>コアアルゴリズム・セキュリティ・WebM/MP4エンコーダ診断結果</h2>
+          <span id="testSummaryBadge" class="badge">待機中</span>
+        </div>
+        <pre id="diagnosticOutput" class="test-box test-box-large">診断を実行しています...</pre>
+      </section>
+    </main>
+
+    <!-- app.js のコアエンジンをロードするための最小オフスクリーンキャンバス -->
+    <canvas id="mainCanvas" width="1920" height="1080" hidden></canvas>
+  </div>
+
+  <script src="app.js?v=20261023_4" defer></script>
+  <script src="test.js?v=20261023_4" defer></script>
+</body>
+</html>
