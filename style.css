@@ -1,10 +1,9 @@
 /* ==========================================================================
    GPX Route Studio Workstation - PC Exclusive Ergonomic Stylesheet (style.css)
-   3-Pane Non-Scrolling Desktop Application Layout (NLE / CAD Inspired)
+   3-Pane Non-Scrolling Desktop Application Layout
    ========================================================================== */
 
 :root {
-  /* うぐいす色（Uguisu）ベースの低眼精疲労ワークステーションパレット */
   --uguisu: #3b8a64;
   --uguisu-hover: #2d7050;
   --uguisu-soft: #dff0e7;
@@ -13,7 +12,7 @@
   --bg-app: #e4ece8;
   --bg-panel: #f7faf8;
   --bg-card: #ffffff;
-  --bg-viewport: #181c1a;
+  --bg-viewport: #161a18;
   --ink: #14281e;
   --muted: #52695d;
   --line: #c5dbd0;
@@ -22,10 +21,9 @@
   --danger-bg: #fceaea;
   --focus: #3b8a64;
 
-  /* ワークステーション固定寸法 */
-  --topbar-h: 48px;
-  --statusbar-h: 30px;
-  --dock-left-w: 340px;
+  --topbar-h: 46px;
+  --statusbar-h: 28px;
+  --dock-left-w: 350px;
   --dock-right-w: 350px;
   --radius-sm: 5px;
   --radius-md: 8px;
@@ -62,7 +60,7 @@ select {
 }
 
 /* ==========================================================================
-   共通ボタン・入力コントロール（PCマウス＆キーボード操作特化）
+   共通ボタン・入力コントロール
    ========================================================================== */
 .btn {
   display: inline-flex;
@@ -123,7 +121,7 @@ select:disabled {
 }
 
 .btn-sm {
-  padding: 4px 8px;
+  padding: 5px 8px;
   font-size: 11.5px;
 }
 
@@ -147,22 +145,13 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 canvas:focus-visible,
-.btn:focus-within {
+.file-zone:focus-within {
   outline: 2px solid var(--focus);
   outline-offset: 1px;
 }
 
-/* ファイル入力の隠蔽 */
-#fileZone input[type="file"] {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-}
-
 /* ==========================================================================
-   ワークステーション全体グリッド（上バー・中央3ペイン・下ステータスバー）
+   ワークステーション全体骨格（上バー・中央3ペイン・下ステータスバー）
    ========================================================================== */
 .workstation {
   display: grid;
@@ -235,6 +224,7 @@ canvas:focus-visible,
 .workspace-grid {
   display: grid;
   grid-template-columns: var(--dock-left-w) minmax(0, 1fr) var(--dock-right-w);
+  grid-template-rows: minmax(0, 1fr);
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -309,7 +299,7 @@ canvas:focus-visible,
   font-variant-numeric: tabular-nums;
 }
 
-/* フォーム行（ラベル＋スライダー＋数値スピンボックス） */
+/* フォーム行 */
 .control-row {
   display: flex;
   align-items: center;
@@ -317,7 +307,7 @@ canvas:focus-visible,
 }
 
 .control-row label {
-  width: 78px;
+  width: 68px;
   flex-shrink: 0;
   font-size: 11.5px;
   font-weight: 650;
@@ -348,7 +338,7 @@ canvas:focus-visible,
 .unit {
   font-size: 11px;
   color: var(--muted);
-  width: 18px;
+  width: 16px;
 }
 
 .text-input,
@@ -367,6 +357,12 @@ canvas:focus-visible,
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
+}
+
+.export-dock {
+  display: grid;
+  gap: 6px;
+  margin-top: 2px;
 }
 
 /* 5つのプリセット配置サムネイル (.thumbs) */
@@ -408,7 +404,7 @@ canvas:focus-visible,
 }
 
 /* ==========================================================================
-   左ドック：Waypointダイレクト編集テーブル（1クリック点滅・インライン地名変更）
+   左ドック：Waypointダイレクト編集テーブル
    ========================================================================== */
 .table-toolbar {
   display: grid;
@@ -418,7 +414,7 @@ canvas:focus-visible,
 
 .wpt-table-head {
   display: grid;
-  grid-template-columns: 38px 34px 1fr 28px;
+  grid-template-columns: 42px 34px 1fr 28px;
   gap: 4px;
   align-items: center;
   padding: 3px 6px;
@@ -442,13 +438,12 @@ canvas:focus-visible,
 
 .wpt-row {
   display: grid;
-  grid-template-columns: 38px 34px 1fr 28px;
+  grid-template-columns: 42px 34px 1fr 28px;
   gap: 4px;
   align-items: center;
   padding: 4px 6px;
   border-bottom: 1px solid var(--line);
   background: var(--bg-card);
-  transition: background-color 0.1s;
 }
 
 .wpt-row:hover {
@@ -467,6 +462,7 @@ canvas:focus-visible,
   border: 1px solid var(--line-strong);
   background: var(--bg-panel);
   color: var(--muted);
+  cursor: pointer;
 }
 
 .wpt-blink-btn[aria-pressed="true"] {
@@ -481,10 +477,11 @@ canvas:focus-visible,
   border-radius: 4px;
   border: 1px solid var(--line);
   background: var(--bg-panel);
+  cursor: pointer;
 }
 
 .wpt-vis-btn[aria-pressed="false"] {
-  opacity: 0.4;
+  opacity: 0.38;
 }
 
 .wpt-inline-input {
@@ -511,6 +508,7 @@ canvas:focus-visible,
   color: var(--muted);
   font-weight: 800;
   font-size: 13px;
+  cursor: pointer;
 }
 
 .wpt-del-btn:hover {
@@ -519,21 +517,65 @@ canvas:focus-visible,
 }
 
 /* ==========================================================================
-   中央ペイン：16:9 メインビューポート＆セーフティガイド枠
+   中央ペイン：常設ドロップバー ＆ 16:9 ビューポート
    ========================================================================== */
 .viewport-pane {
   background: var(--bg-viewport);
   display: grid;
-  grid-template-rows: 36px minmax(0, 1fr);
+  grid-template-rows: auto 32px minmax(0, 1fr);
   position: relative;
   height: 100%;
   min-height: 0;
   overflow: hidden;
 }
 
+/* 常設ドラッグ＆ドロップバー (.file-zone) */
+.file-zone {
+  margin: 8px 12px 4px;
+  padding: 7px 14px;
+  border: 2px dashed #529e78;
+  border-radius: var(--radius-md);
+  background: rgba(59, 138, 100, 0.16);
+  color: #e6f5ed;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  position: relative;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.file-zone:hover:not(.disabled),
+.file-zone.dragover:not(.disabled) {
+  background: rgba(59, 138, 100, 0.35);
+  border-color: #82e0b2;
+  border-style: solid;
+}
+
+.file-zone.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.file-zone-main {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.file-zone input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 .viewport-bar {
-  background: #232926;
-  border-bottom: 1px solid #353f3a;
+  background: #222825;
+  border-top: 1px solid #333d38;
+  border-bottom: 1px solid #333d38;
   padding: 0 12px;
   display: flex;
   align-items: center;
@@ -542,16 +584,9 @@ canvas:focus-visible,
   color: #dce5e0;
 }
 
-.viewport-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
 .meta-text {
   font-size: 11.5px;
-  color: #aebdb5;
+  color: #b4c4bc;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -563,40 +598,54 @@ canvas:focus-visible,
   gap: 6px;
 }
 
+/* 16:9 プレビュー領域（Flexboxで確実に中央フィット） */
 .preview {
   width: 100%;
   height: 100%;
   min-height: 0;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   position: relative;
-  padding: 16px;
+  padding: 14px;
   overflow: hidden;
 }
 
-/* 16:9 透過チェッカーボード付きキャンバス */
-.preview canvas {
-  display: block;
+.preview.dragover {
+  background: rgba(59, 138, 100, 0.22);
+  outline: 3px dashed #6ee7b7;
+  outline-offset: -8px;
+}
+
+.canvas-stage {
+  position: relative;
   max-width: 100%;
   max-height: 100%;
-  width: auto;
-  height: auto;
   aspect-ratio: 16 / 9;
-  background: repeating-conic-gradient(#262b28 0% 25%, #1e2220 0% 50%) 50% / 24px 24px;
-  border: 1px solid #45524b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.65);
+  border: 1px solid #45524b;
+}
+
+.canvas-stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: repeating-conic-gradient(#262b28 0% 25%, #1e2220 0% 50%) 50% / 24px 24px;
   cursor: grab;
   touch-action: none;
 }
 
-.preview canvas:active {
+.canvas-stage canvas:active {
   cursor: grabbing;
 }
 
-/* 録画には写り込まない16:9 セーフティガイド枠 */
+/* 16:9 セーフティガイド枠（キャンバスステージに完全一致） */
 .safety-guide {
   position: absolute;
-  inset: 16px;
+  inset: 0;
   pointer-events: none;
   display: grid;
   place-items: center;
@@ -605,7 +654,7 @@ canvas:focus-visible,
 .guide-action-safe {
   width: 90%;
   height: 90%;
-  border: 1px dashed rgba(100, 210, 255, 0.35);
+  border: 1px dashed rgba(100, 210, 255, 0.4);
   position: relative;
 }
 
@@ -613,7 +662,7 @@ canvas:focus-visible,
   position: absolute;
   width: 80%;
   height: 80%;
-  border: 1px dashed rgba(255, 214, 10, 0.35);
+  border: 1px dashed rgba(255, 214, 10, 0.4);
 }
 
 .guide-label {
@@ -621,7 +670,7 @@ canvas:focus-visible,
   top: 4px;
   left: 6px;
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgba(255, 255, 255, 0.5);
   font-family: ui-monospace, monospace;
 }
 
@@ -629,37 +678,43 @@ canvas:focus-visible,
   position: absolute;
   width: 100%;
   height: 1px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .guide-crosshair-v {
   position: absolute;
   width: 1px;
   height: 100%;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .empty {
   text-align: center;
-  padding: 36px;
-  color: #aebdb5;
+  padding: 36px 28px;
+  color: #c2d4cb;
   background: rgba(255, 255, 255, 0.04);
-  border: 1.5px dashed #4a5c53;
+  border: 2px dashed #529e78;
   border-radius: 12px;
-  max-width: 520px;
+  max-width: 540px;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.empty:hover {
+  background: rgba(59, 138, 100, 0.18);
+  border-color: #82e0b2;
 }
 
 .empty strong {
   display: block;
   color: #ffffff;
-  font-size: 15px;
-  margin-bottom: 8px;
+  font-size: 16px;
+  margin-bottom: 10px;
 }
 
-/* キャンバス下部フローティング地点追加バー */
 .floating-editor {
   position: absolute;
-  bottom: 20px;
+  bottom: 18px;
   left: 50%;
   transform: translateX(-50%);
   background: var(--bg-card);
@@ -705,7 +760,6 @@ canvas:focus-visible,
   z-index: 2;
 }
 
-/* CSP style-src 'self' 準拠のカラースウォッチ定義 */
 .swatch[data-color="#ffffff"] { background-color: #ffffff; }
 .swatch[data-color="#529e78"] { background-color: #529e78; }
 .swatch[data-color="#ffd60a"] { background-color: #ffd60a; }
@@ -755,7 +809,7 @@ canvas:focus-visible,
   background: var(--pale);
   border: 1px solid var(--line);
   padding: 7px 9px;
-  border-radius: var(--radius-sm);
+  border-radius: 5px;
   color: var(--muted);
   font-size: 11px;
   line-height: 1.35;
@@ -794,33 +848,6 @@ canvas:focus-visible,
   color: #a3c4b3;
   font-size: 11px;
   white-space: nowrap;
-}
-
-/* 画面全体へのドラッグ＆ドロップオーバーレイ */
-.drop-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(19, 57, 38, 0.78);
-  z-index: 999;
-  display: grid;
-  place-items: center;
-  pointer-events: none;
-}
-
-.drop-Overlay-box {
-  background: var(--bg-card);
-  border: 3px dashed var(--uguisu);
-  border-radius: 16px;
-  padding: 36px 56px;
-  text-align: center;
-  color: var(--deep);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-}
-
-.drop-Overlay-box strong {
-  display: block;
-  font-size: 20px;
-  margin-bottom: 8px;
 }
 
 .frame-blocked {
