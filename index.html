@@ -8,7 +8,7 @@
   <meta http-equiv="Expires" content="0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src blob: data:; media-src blob:; connect-src 'self'; base-uri 'none'; form-action 'none';">
   <title>GPX Route Studio Workstation</title>
-  <link rel="stylesheet" href="style.css?v=20261023_3">
+  <link rel="stylesheet" href="style.css?v=20261023_4">
 </head>
 <body>
 
@@ -31,11 +31,10 @@
 
         <div class="divider-v"></div>
 
-        <!-- ファイル操作ツールバー -->
+        <!-- ファイル操作ツールバー（GPX / 写真 / 動画 / JSON 対応） -->
         <div class="toolbar-group" role="group" aria-label="ファイル操作">
-          <button type="button" id="btnOpenFile" class="btn btn-toolbar" title="GPX・背景写真・プロジェクトJSONを選択します">📂 素材ファイルを選択...</button>
-          <button type="button" id="btnSample" class="btn btn-toolbar" title="sample_routegpx.gpx を読み込みます">サンプル読込</button>
-          <button type="button" id="btnClearPhoto" class="btn btn-toolbar" disabled title="読み込んだ背景写真を破棄してメモリを解放します">背景写真解除</button>
+          <button type="button" id="btnOpenFile" class="btn btn-toolbar" title="GPX・背景写真・背景動画・プロジェクトJSONを選択します">📂 素材ファイルを選択...</button>
+          <button type="button" id="btnClearMedia" class="btn btn-toolbar" disabled title="読み込んだ背景写真・背景動画を破棄してメモリを解放します">背景素材解除</button>
         </div>
 
         <div class="divider-v"></div>
@@ -50,13 +49,13 @@
         </div>
       </div>
 
-      <!-- 右端：診断・ガイド＆エクスポート実行ドック -->
+      <!-- 右端：ガイド＆エクスポート実行ドック（PNG / WebM / MP4） -->
       <div class="topbar-right">
-        <button type="button" id="btnSelfTest" class="btn btn-toolbar" title="システムの自己診断テストを実行します">診断テスト</button>
         <a href="guide.html" class="btn btn-toolbar" title="動画編集ソフト別の合成ガイドを開きます">📖 合成ガイド</a>
         <div class="divider-v"></div>
-        <button type="button" id="btnExportPng" class="btn btn-secondary" title="現在のフレームを1920x1080のPNG静止画として保存します">📷 静止画保存 (.png)</button>
-        <button type="button" id="btnExportVideo" class="btn btn-primary" title="設定した秒数の合成用アニメーション動画を書き出します">🎬 動画書き出し (.webm)</button>
+        <button type="button" id="btnExportPng" class="btn btn-secondary" title="現在のフレームを1920x1080のPNG静止画として保存します">📷 静止画 (.png)</button>
+        <button type="button" id="btnExportWebm" class="btn btn-primary" title="背景透過アルファ対応のWebM形式でアニメーション動画を書き出します">🎬 WebM書き出し (.webm)</button>
+        <button type="button" id="btnExportMp4" class="btn btn-primary" title="汎用性の高いMP4形式でアニメーション動画を書き出します">🎬 MP4書き出し (.mp4)</button>
       </div>
     </header>
 
@@ -188,28 +187,29 @@
       <!-- 【中央ペイン】専用ドロップバー ＆ 16:9 メインビューポート -->
       <section class="viewport-pane" aria-label="メインプレビュービューポート">
 
-        <!-- 常設ドラッグ＆ドロップゾーン -->
+        <!-- 常設ドラッグ＆ドロップゾーン（GPX / 写真 / 動画 / JSON 対応） -->
         <label id="fileZone" class="file-zone" tabindex="0">
-          <span class="file-zone-main">📂 ここに GPXファイル (.gpx) ／ 背景写真 ／ 保存プロジェクト (.json) をドラッグ＆ドロップ（またはクリックして選択）</span>
+          <span class="file-zone-main">📂 ここに GPX (.gpx) ／ 背景写真・動画 (.jpg, .png, .mp4, .webm, .mov) ／ プロジェクト (.json) をドロップまたは選択</span>
           <span id="pointBadge" class="badge">0 pts</span>
-          <input type="file" id="fileInput" accept=".gpx,.xml,application/gpx+xml,text/xml,image/jpeg,image/png,image/webp,.json,application/json" multiple>
+          <input type="file" id="fileInput" accept=".gpx,.xml,application/gpx+xml,text/xml,image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.json,application/json" multiple>
         </label>
 
         <!-- ビューポート制御サブバー -->
         <div class="viewport-bar">
           <span id="metaInfo" class="meta-text">GPXファイルをドロップまたは選択してください。</span>
           <div class="viewport-tools">
+            <button type="button" id="btnSyncVideoDur" class="btn btn-xs" hidden title="録画秒数を読み込んだ背景動画の長さに合わせます">⏱ 録画秒数を背景動画に合わせる</button>
             <button type="button" id="btnSnapAllWpts" class="btn btn-xs" title="すべてのWaypointを最寄りのルート線上へ一括吸着（スナップ）させます">🧲 全Wptをルートへ吸着</button>
             <button type="button" id="btnToggleGuide" class="btn btn-xs" aria-pressed="false" title="動画編集時の配置確認用16:9セーフティ枠を表示します（書き出し時は自動で消えます）[ショートカット: G]">📏 セーフティ枠: OFF</button>
-            <button type="button" id="btnResetAnim" class="btn btn-xs" title="アニメーション周期を先頭(0秒)にリセットします [ショートカット: Space]">⏮ アニメ先頭へ</button>
+            <button type="button" id="btnResetAnim" class="btn btn-xs" title="アニメーション周期と背景動画を先頭(0秒)にリセットします [ショートカット: Space]">⏮ 先頭へ</button>
           </div>
         </div>
 
         <!-- 16:9 キャンバスステージ -->
         <div class="preview" id="previewContainer">
-          <div id="emptyState" class="empty" role="button" tabindex="0" title="クリックしてGPXファイルを選択、またはここにファイルをドロップ">
-            <strong>📂 GPXファイルをここにドロップして開始</strong>
-            <span>手持ちの <b>.gpx ファイル</b>、<b>背景写真</b>、または保存した <b>.json プロジェクト</b> をこのエリアにドラッグ＆ドロップしてください。<br>（クリックするとファイル選択ウィンドウが開きます）</span>
+          <div id="emptyState" class="empty" role="button" tabindex="0" title="クリックしてファイルを選択、またはここにファイルをドロップ">
+            <strong>📂 GPXファイル・背景写真・背景動画をここにドロップ</strong>
+            <span>手持ちの <b>.gpx ファイル</b>、合成したい <b>写真・動画 (.mp4 / .webm / .mov)</b>、または保存した <b>.json プロジェクト</b> をドラッグ＆ドロップしてください。<br>（クリックするとファイル選択ウィンドウが開きます）</span>
           </div>
 
           <div id="canvasStage" class="canvas-stage" hidden>
@@ -239,7 +239,7 @@
 
       </section>
 
-      <!-- 【右ドック】スタイル・アニメーション・クロマキー出力インスペクター -->
+      <!-- 【右ドック】スタイル・アニメーション・動画書き出しインスペクター -->
       <aside class="dock dock-right" aria-label="スタイルおよび動画書き出し設定">
 
         <!-- セクション5: ルート線画＆ラベル外観 -->
@@ -331,7 +331,7 @@
           <span id="speedBadge" hidden>2.0x / 10px</span>
         </section>
 
-        <!-- セクション7: 動画合成・クロマキー出力設定 -->
+        <!-- セクション7: 動画合成・クロマキー出力設定（WebM / MP4 両対応） -->
         <section class="dock-section">
           <div class="section-header">
             <h2>7. 動画合成モード ＆ 書き出し</h2>
@@ -341,7 +341,7 @@
           <div class="control-row">
             <label for="bgModeSelect">出力背景</label>
             <select id="bgModeSelect" class="select-input">
-              <option value="transparent">背景透過（WebMアルファ / 写真合成）</option>
+              <option value="transparent">背景透過（WebMアルファ / 写真・動画合成）</option>
               <option value="green">グリーンバック（#00FF00 防スピル済）</option>
               <option value="blue">ブルーバック（#0000FF 防スピル済）</option>
               <option value="black">ブラック背景（#000000 スクリーン用）</option>
@@ -350,28 +350,28 @@
 
           <div class="control-row">
             <label for="recordSecRange">録画秒数</label>
-            <input type="range" id="recordSecRange" min="2" max="30" step="1" value="5">
-            <input type="number" id="recordSecNum" class="num-input" min="2" max="30" step="1" value="5">
+            <input type="range" id="recordSecRange" min="2" max="60" step="1" value="5">
+            <input type="number" id="recordSecNum" class="num-input" min="2" max="60" step="1" value="5">
             <span class="unit">秒</span>
           </div>
 
           <p id="chromaHint" class="hint-box">
-            Premiere / DaVinci等でそのまま重ねられる透過WebMモードです。
+            背景透過はWebM形式に対応。MP4書き出し時は背景動画・写真合成やグリーンバック等に最適です。
           </p>
 
           <div class="export-dock">
-            <button type="button" id="btnExportVideoSide" class="btn btn-primary btn-block">🎬 合成用アニメーション動画を書き出す (.webm)</button>
+            <div class="button-pair">
+              <button type="button" id="btnExportWebmSide" class="btn btn-primary" title="アルファ透過対応のWebM動画として保存します">🎬 WebM保存 (.webm)</button>
+              <button type="button" id="btnExportMp4Side" class="btn btn-primary" title="汎用MP4動画として保存します">🎬 MP4保存 (.mp4)</button>
+            </div>
             <button type="button" id="btnExportPngSide" class="btn btn-secondary btn-block">📷 現在のフレームを静止画保存 (.png)</button>
           </div>
         </section>
 
-        <!-- 自己診断テスト結果表示領域 -->
-        <pre id="testBox" class="test-box" hidden></pre>
-
         <!-- ライセンス・セキュリティ保証 -->
         <div class="privacy-box">
           🔒 <b>完全ローカル処理・著作権フリー</b><br>
-          外部地図タイル不使用のため、出力した動画・画像はYouTube等でクレジット表記なし・商用フリーで合成できます。
+          外部地図タイル不使用のため、出力した動画・画像はYouTube等でクレジット表記なし・商用フリーで合成できます。武庫労山を紹介してもらえると嬉しいです。
         </div>
 
       </aside>
@@ -381,7 +381,7 @@
     <!-- ==================== 下部：ステータス＆ショートカットバー ==================== -->
     <footer class="statusbar">
       <div id="statusBox" class="status-msg" role="status" aria-live="polite">
-        準備完了。GPXファイルをドロップまたは選択してください。
+        準備完了。GPXファイルや背景写真・動画をドロップまたは選択してください。
       </div>
       <div class="shortcut-hints">
         <span><b>ドラッグ</b>: 地図移動</span>
@@ -396,6 +396,6 @@
 
   </div>
 
-  <script src="app.js?v=20261023_3" defer></script>
+  <script src="app.js?v=20261023_4" defer></script>
 </body>
 </html>
