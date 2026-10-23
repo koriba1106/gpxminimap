@@ -1,11 +1,6 @@
 /**
  * GPX Route Studio Workstation - Production Core Engine (app.js)
- * PC Workstation Edition:
- *  - Direct Waypoint Table (1-click blink toggle, visibility toggle, inline rename, delete)
- *  - Bi-directional Slider <-> Number Spinbox synchronization
- *  - Full-window Drag & Drop (.gpx / Photo / Project .json)
- *  - 16:9 Action/Title Safety Guide Overlay & PC Keyboard Shortcuts
- *  - Chroma-Key Spill Suppression, Distance Lerp, Anchor-protected RDP, Memory-safe Architecture
+ * Crash-proof Null-safe DOM binding & Multi-layer Drag-and-Drop Architecture
  */
 (() => {
   'use strict';
@@ -19,7 +14,14 @@
     return;
   }
 
-  // --- 2. システム定数・安全制限値 ---
+  // --- Nullセーフなイベント登録ヘルパー（要素欠落による初期化クラッシュを100%防止） ---
+  function on(el, type, handler, options) {
+    if (el && typeof el.addEventListener === 'function') {
+      el.addEventListener(type, handler, options);
+    }
+  }
+
+  // --- 2. システム定数・制限値 ---
   const CONFIG = Object.freeze({
     PROJECT_MAGIC: 'GPX_ROUTE_STUDIO_PROJECT',
     PROJECT_VERSION: 1,
@@ -51,10 +53,10 @@
   // --- 3. DOM要素の取得 ---
   const canvas = document.getElementById('mainCanvas');
   if (!canvas) return;
-  const ctx = canvas.getContext('2d', { alpha: true, desynchronized: false });
+  const ctx = canvas.getContext('2d', { alpha: true });
 
   const UI = Object.freeze({
-    dropOverlay: document.getElementById('dropOverlay'),
+    btnOpenFile: document.getElementById('btnOpenFile'),
     btnSaveProject: document.getElementById('btnSaveProject'),
     btnLoadProject: document.getElementById('btnLoadProject'),
     projectInput: document.getElementById('projectInput'),
@@ -65,7 +67,9 @@
     fileZone: document.getElementById('fileZone'),
     fileInput: document.getElementById('fileInput'),
     metaInfo: document.getElementById('metaInfo'),
+    previewContainer: document.getElementById('previewContainer'),
     emptyState: document.getElementById('emptyState'),
+    canvasStage: document.getElementById('canvasStage'),
     safetyGuideOverlay: document.getElementById('safetyGuideOverlay'),
     btnToggleGuide: document.getElementById('btnToggleGuide'),
     btnResetAnim: document.getElementById('btnResetAnim'),
@@ -116,6 +120,8 @@
     chromaHint: document.getElementById('chromaHint'),
     btnExportVideo: document.getElementById('btnExportVideo'),
     btnExportPng: document.getElementById('btnExportPng'),
+    btnExportVideoSide: document.getElementById('btnExportVideoSide'),
+    btnExportPngSide: document.getElementById('btnExportPngSide'),
     statusBox: document.getElementById('statusBox'),
     testBox: document.getElementById('testBox')
   });
@@ -169,8 +175,21 @@
   }
 
   function setStatus(message, isError = false) {
+    if (!UI.statusBox) return;
     UI.statusBox.textContent = message;
     UI.statusBox.classList.toggle('error', Boolean(isError));
+  }
+
+  function readFileAsText(file) {
+    if (typeof file.text === 'function') {
+      return file.text();
+    }
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('ファイルの読み取りに失敗しました。'));
+      reader.readAsText(file, 'UTF-8');
+    });
   }
 
   function triggerBlobDownload(blob, filename) {
@@ -201,6 +220,7 @@
   }
 
   function validateChromaCollision() {
+    if (!UI.bgModeSelect || !UI.chromaHint) return;
     const mode = UI.bgModeSelect.value;
     if (mode === 'green') {
       UI.chromaHint.textContent = 'グリーンバック出力：スピル（緑かぶり）防止のため半透明混合を自動抑止します。';
@@ -227,7 +247,7 @@
       State.bgBufferCanvas = null;
     }
     State.bgPhotoName = '';
-    UI.btnClearPhoto.disabled = true;
+    if (UI.btnClearPhoto) UI.btnClearPhoto.disabled = true;
     updateMetaText();
     renderPresetThumbnails();
   }
@@ -267,11 +287,12 @@
     }
     State.mediaRecorder = null;
     State.isRecording = false;
-    UI.fileZone.classList.remove('disabled');
-    UI.fileInput.disabled = false;
-    UI.btnSaveProject.disabled = false;
-    UI.btnLoadProject.disabled = false;
-    UI.btnExportVideo.textContent = '🎬 動画書き出し (.webm)';
+    if (UI.fileZone) UI.fileZone.classList.remove('disabled');
+    if (UI.fileInput) UI.fileInput.disabled = false;
+    if (UI.btnSaveProject) UI.btnSaveProject.disabled = false;
+    if (UI.btnLoadProject) UI.btnLoadProject.disabled = false;
+    if (UI.btnExportVideo) UI.btnExportVideo.textContent = '🎬 動画書き出し (.webm)';
+    if (UI.btnExportVideoSide) UI.btnExportVideoSide.textContent = '🎬 合成用アニメーション動画を書き出す (.webm)';
   }
 
   // --- 7. コサイン補正＆Waypointアンカー保護付きRDP軽量化 ---
@@ -468,26 +489,28 @@
   // --- 10. ビューポート情報＆5配置サムネイル描画 ---
   function updateMetaText() {
     const hasTrack = State.trackPoints.length > 0;
-    UI.emptyState.hidden = hasTrack;
+    if (UI.emptyState) UI.emptyState.hidden = hasTrack;
+    if (UI.canvasStage) UI.canvasStage.hidden = !hasTrack;
     canvas.hidden = !hasTrack;
-    UI.safetyGuideOverlay.hidden = !hasTrack || !State.showGuide;
+    if (UI.safetyGuideOverlay) UI.safetyGuideOverlay.hidden = !hasTrack || !State.showGuide;
 
     if (!hasTrack) {
-      UI.pointBadge.textContent = '0 pts';
-      UI.metaInfo.textContent = 'GPXファイルまたはプロジェクト(.json)をドロップしてください';
+      if (UI.pointBadge) UI.pointBadge.textContent = '0 pts';
+      if (UI.metaInfo) UI.metaInfo.textContent = 'GPXファイルまたはプロジェクト(.json)をドロップしてください';
       return;
     }
 
     const ptText = State.rawPointCount !== State.trackPoints.length
       ? `${State.rawPointCount.toLocaleString()} → ${State.trackPoints.length.toLocaleString()} pts`
       : `${State.trackPoints.length.toLocaleString()} pts`;
-    UI.pointBadge.textContent = ptText;
+    if (UI.pointBadge) UI.pointBadge.textContent = ptText;
 
-    const photoText = State.bgPhotoName ? ` ｜ 写真: ${State.bgPhotoName}` : ' ｜ 背景: 透過/クロマキー';
-    UI.metaInfo.textContent = `${State.gpxFileName}（Waypoint: ${State.waypoints.length}箇所）${photoText}`;
+    const photoText = State.bgPhotoName ? ` ｜ 背景写真: ${State.bgPhotoName}` : ' ｜ 背景: 透過/クロマキー';
+    if (UI.metaInfo) UI.metaInfo.textContent = `ルート: ${State.gpxFileName}（${ptText} / Waypoint: ${State.waypoints.length}箇所）${photoText}`;
   }
 
   function renderPresetThumbnails() {
+    if (!UI.presetThumbs) return;
     const thumbButtons = UI.presetThumbs.querySelectorAll('.thumb');
     const tp = State.trackPoints;
 
@@ -550,143 +573,351 @@
     });
   }
 
-  // --- 11. Waypointダイレクト編集テーブル構築（1クリック点滅・直接リネーム・XSS完全防御） ---
+  // --- 11. セキュアGPX / JSON / 写真ファイルローダー & 多重ドラッグ＆ドロップ登録 ---
+  function sanitizeXmlString(xmlText) {
+    if (xmlText.length > CONFIG.MAX_XML_LENGTH) {
+      throw new Error('XMLサイズが上限を超えています。');
+    }
+    // BOMおよび先頭の空白・改行を除去（DOMParserが先頭空白で構文エラーになるのを防止）
+    const cleaned = xmlText.replace(/^\uFEFF/, '').trimStart();
+    if (/<!(DOCTYPE|ENTITY)\b/i.test(cleaned)) {
+      throw new Error('DOCTYPEまたはENTITY宣言を含むXMLは読み込めません。');
+    }
+    return cleaned;
+  }
+
+  /**
+   * 名前空間プレフィックス（gpx:trkpt等）の有無に関わらず確実に要素リストを取得する
+   */
+  function getXmlElements(xmlDoc, tagName) {
+    let list = Array.from(xmlDoc.getElementsByTagName(tagName));
+    if (list.length === 0 && typeof xmlDoc.getElementsByTagNameNS === 'function') {
+      list = Array.from(xmlDoc.getElementsByTagNameNS('*', tagName));
+    }
+    return list;
+  }
+
+  async function processUploadedFiles(fileList) {
+    if (!fileList || fileList.length === 0 || State.isRecording) return;
+    const currentSession = ++State.loadSessionId;
+
+    for (const file of Array.from(fileList)) {
+      if (currentSession !== State.loadSessionId) return;
+      const lowerName = (file.name || '').toLowerCase();
+      const mime = (file.type || '').toLowerCase();
+
+      // 画像ファイルの判定
+      if (mime.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(lowerName)) {
+        if (file.size > CONFIG.MAX_PHOTO_BYTES) {
+          setStatus(`エラー: 画像「${file.name}」が上限(30MB)を超えています。`, true);
+          continue;
+        }
+        releasePhotoMemory();
+        const tempUrl = URL.createObjectURL(file);
+        const img = new Image();
+        await new Promise((resolve) => {
+          img.onload = () => {
+            if (currentSession === State.loadSessionId && img.naturalWidth > 0 && img.naturalHeight > 0) {
+              State.bgBufferCanvas = createPrescaledPhotoBuffer(img);
+              State.bgPhotoName = file.name;
+              if (UI.btnClearPhoto) UI.btnClearPhoto.disabled = false;
+              updateMetaText();
+              renderPresetThumbnails();
+              setStatus(`背景写真「${file.name}」をセットしました。`);
+            }
+            URL.revokeObjectURL(tempUrl);
+            img.onload = null; img.onerror = null; img.src = '';
+            resolve();
+          };
+          img.onerror = () => {
+            URL.revokeObjectURL(tempUrl);
+            img.onload = null; img.onerror = null;
+            setStatus('画像の読み込みに失敗しました。', true);
+            resolve();
+          };
+          img.src = tempUrl;
+        });
+        continue;
+      }
+
+      // テキスト系ファイル（GPX または プロジェクトJSON）の読み取りと自動判別
+      if (file.size > CONFIG.MAX_GPX_BYTES) {
+        setStatus(`エラー: ファイル「${file.name}」が上限サイズ(25MB)を超えています。`, true);
+        continue;
+      }
+
+      try {
+        const rawText = await readFileAsText(file);
+        if (currentSession !== State.loadSessionId) return;
+        const trimmed = rawText.replace(/^\uFEFF/, '').trimStart();
+
+        // A. プロジェクトJSONの判定（拡張子 .json または先頭が '{' でPROJECT_MAGICを含む）
+        if (lowerName.endsWith('.json') || mime === 'application/json' || (trimmed.startsWith('{') && trimmed.includes(CONFIG.PROJECT_MAGIC))) {
+          const validated = parseAndValidateProjectJson(trimmed);
+          await applyValidatedProject(validated, currentSession);
+          setStatus(`プロジェクト「${file.name}」を復元しました。`);
+          continue;
+        }
+
+        // B. GPX（XML）の判定・解析
+        const safeText = sanitizeXmlString(trimmed);
+        const xml = new DOMParser().parseFromString(safeText, 'text/xml');
+        if (xml.querySelector('parsererror')) {
+          throw new Error('GPXファイルのXML構造が正しくありません。');
+        }
+
+        let nodes = getXmlElements(xml, 'trkpt');
+        if (nodes.length === 0) nodes = getXmlElements(xml, 'rtept');
+
+        const rawPts = [];
+        for (let i = 0; i < nodes.length; i++) {
+          const lat = parseFloat(nodes[i].getAttribute('lat'));
+          const lon = parseFloat(nodes[i].getAttribute('lon'));
+          if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+            rawPts.push({ lat, lon });
+          }
+        }
+
+        const wptNodes = getXmlElements(xml, 'wpt');
+        // trkptが無くwptのみが2点以上ある特殊なGPXにも対応
+        if (rawPts.length < 2 && wptNodes.length >= 2) {
+          for (let i = 0; i < wptNodes.length; i++) {
+            const lat = parseFloat(wptNodes[i].getAttribute('lat'));
+            const lon = parseFloat(wptNodes[i].getAttribute('lon'));
+            if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+              rawPts.push({ lat, lon });
+            }
+          }
+        }
+
+        if (rawPts.length < 2) {
+          throw new Error('有効なGPS座標（2点以上）が見つかりません。');
+        }
+
+        const wpts = [];
+        for (let i = 0; i < wptNodes.length && wpts.length < CONFIG.MAX_WAYPOINTS; i++) {
+          const lat = parseFloat(wptNodes[i].getAttribute('lat'));
+          const lon = parseFloat(wptNodes[i].getAttribute('lon'));
+          if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+            const nameEl = getXmlElements(wptNodes[i], 'name')[0];
+            const name = (nameEl?.textContent || `地点${i + 1}`).trim().slice(0, 40);
+            wpts.push({ id: State.nextId++, lat, lon, name, visible: true, blinking: i === 0 });
+          }
+        }
+
+        State.gpxFileName = file.name || 'route.gpx';
+        State.rawPointCount = rawPts.length;
+        State.trackPoints = simplifyTrackWithAnchors(rawPts, wpts, CONFIG.MAX_RENDER_PTS);
+
+        if (wpts.length === 0) {
+          const tp = State.trackPoints;
+          const mid = Math.floor(tp.length * 0.5);
+          wpts.push({ id: State.nextId++, ...tp[0], name: 'スタート', visible: true, blinking: false });
+          wpts.push({ id: State.nextId++, ...tp[mid], name: '山頂・中間地点', visible: true, blinking: true });
+          wpts.push({ id: State.nextId++, ...tp[tp.length - 1], name: 'ゴール', visible: true, blinking: false });
+        }
+
+        State.waypoints = wpts;
+        State.selectedWptId = wpts[0].id;
+        closeFloatingAddBar(false);
+        recalculateBoundsAndDistances();
+        updateMetaText();
+        syncWaypointSelectUI();
+        setStatus(`GPX「${State.gpxFileName}」(${State.rawPointCount.toLocaleString()}点) を読み込みました。`);
+      } catch (err) {
+        setStatus(`ファイル読込エラー (${file.name}): ${err.message}`, true);
+      }
+    }
+    if (UI.fileInput) UI.fileInput.value = '';
+  }
+
+  // --- 最優先でファイル選択＆ドラッグ＆ドロップイベントをバインド ---
+  on(UI.fileInput, 'change', (e) => processUploadedFiles(e.target.files));
+  on(UI.btnOpenFile, 'click', () => {
+    if (!State.isRecording && UI.fileInput) UI.fileInput.click();
+  });
+  on(UI.emptyState, 'click', () => {
+    if (!State.isRecording && UI.fileInput) UI.fileInput.click();
+  });
+
+  // ドロップイベントをdocument全体・fileZone・previewContainerのすべてで確実に捕捉
+  function handleDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (State.isRecording) return;
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    if (UI.fileZone) UI.fileZone.classList.add('dragover');
+    if (UI.previewContainer) UI.previewContainer.classList.add('dragover');
+  }
+
+  function handleDragLeave(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.relatedTarget === null || !document.body.contains(e.relatedTarget)) {
+      if (UI.fileZone) UI.fileZone.classList.remove('dragover');
+      if (UI.previewContainer) UI.previewContainer.classList.remove('dragover');
+    }
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (UI.fileZone) UI.fileZone.classList.remove('dragover');
+    if (UI.previewContainer) UI.previewContainer.classList.remove('dragover');
+    if (State.isRecording) return;
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      processUploadedFiles(e.dataTransfer.files);
+    }
+  }
+
+  on(document, 'dragenter', handleDragOver);
+  on(document, 'dragover', handleDragOver);
+  on(document, 'dragleave', handleDragLeave);
+  on(document, 'drop', handleDrop);
+  on(UI.fileZone, 'dragover', handleDragOver);
+  on(UI.fileZone, 'drop', handleDrop);
+  on(UI.previewContainer, 'dragover', handleDragOver);
+  on(UI.previewContainer, 'drop', handleDrop);
+
+  // --- 12. Waypointダイレクト編集テーブル ---
   function updateBlinkCountBadge() {
     let blinkCount = State.seekBlinking ? 1 : 0;
     for (let i = 0; i < State.waypoints.length; i++) {
       if (State.waypoints[i].blinking) blinkCount++;
     }
-    UI.blinkCountBadge.textContent = `点滅: ${blinkCount}箇所`;
+    if (UI.blinkCountBadge) UI.blinkCountBadge.textContent = `点滅: ${blinkCount}箇所`;
     renderPresetThumbnails();
   }
 
   function syncWaypointSelectUI() {
-    UI.wptTableBody.replaceChildren();
-    UI.wptSelect.replaceChildren();
+    if (UI.wptTableBody) UI.wptTableBody.replaceChildren();
+    if (UI.wptSelect) UI.wptSelect.replaceChildren();
 
     if (State.waypoints.length === 0) {
-      const emptyRow = document.createElement('div');
-      emptyRow.className = 'wpt-row';
-      emptyRow.textContent = 'Waypointなし';
-      UI.wptTableBody.appendChild(emptyRow);
+      if (UI.wptTableBody) {
+        const emptyRow = document.createElement('div');
+        emptyRow.className = 'wpt-row';
+        emptyRow.textContent = 'Waypointなし';
+        UI.wptTableBody.appendChild(emptyRow);
+      }
       updateBlinkCountBadge();
       return;
     }
 
     State.waypoints.forEach((wpt) => {
-      // 1. ダイレクト編集テーブル行の生成
-      const row = document.createElement('div');
-      row.className = wpt.blinking ? 'wpt-row is-blinking' : 'wpt-row';
+      if (UI.wptTableBody) {
+        const row = document.createElement('div');
+        row.className = wpt.blinking ? 'wpt-row is-blinking' : 'wpt-row';
 
-      // 点滅ON/OFFボタン
-      const blinkBtn = document.createElement('button');
-      blinkBtn.type = 'button';
-      blinkBtn.className = 'wpt-blink-btn';
-      blinkBtn.setAttribute('aria-pressed', String(Boolean(wpt.blinking)));
-      blinkBtn.textContent = wpt.blinking ? '⚡ON' : 'OFF';
-      blinkBtn.title = 'クリックで点滅ON/OFF（Shift+クリックでこの地点のみ単独点滅）';
-      blinkBtn.addEventListener('click', (e) => {
-        if (e.shiftKey) {
-          State.waypoints.forEach(w => { w.blinking = (w.id === wpt.id); });
-          State.seekBlinking = false;
-          UI.btnToggleSeekBlink.setAttribute('aria-pressed', 'false');
-          UI.btnToggleSeekBlink.textContent = '⚡ シーク位置を点滅: OFF';
-        } else {
-          wpt.blinking = !wpt.blinking;
-        }
-        syncWaypointSelectUI();
-      });
+        const blinkBtn = document.createElement('button');
+        blinkBtn.type = 'button';
+        blinkBtn.className = 'wpt-blink-btn';
+        blinkBtn.setAttribute('aria-pressed', String(Boolean(wpt.blinking)));
+        blinkBtn.textContent = wpt.blinking ? '⚡ON' : 'OFF';
+        blinkBtn.title = 'クリックで点滅ON/OFF（Shift+クリックで単独点滅）';
+        blinkBtn.addEventListener('click', (e) => {
+          if (e.shiftKey) {
+            State.waypoints.forEach(w => { w.blinking = (w.id === wpt.id); });
+            State.seekBlinking = false;
+            if (UI.btnToggleSeekBlink) {
+              UI.btnToggleSeekBlink.setAttribute('aria-pressed', 'false');
+              UI.btnToggleSeekBlink.textContent = '⚡ シーク位置を点滅: OFF';
+            }
+          } else {
+            wpt.blinking = !wpt.blinking;
+          }
+          syncWaypointSelectUI();
+        });
 
-      // ラベル表示ON/OFFボタン
-      const visBtn = document.createElement('button');
-      visBtn.type = 'button';
-      visBtn.className = 'wpt-vis-btn';
-      visBtn.setAttribute('aria-pressed', String(Boolean(wpt.visible)));
-      visBtn.textContent = wpt.visible ? '👁' : 'ー';
-      visBtn.title = '日本語ラベルの表示/非表示を切り替え';
-      visBtn.addEventListener('click', () => {
-        wpt.visible = !wpt.visible;
-        syncWaypointSelectUI();
-      });
+        const visBtn = document.createElement('button');
+        visBtn.type = 'button';
+        visBtn.className = 'wpt-vis-btn';
+        visBtn.setAttribute('aria-pressed', String(Boolean(wpt.visible)));
+        visBtn.textContent = wpt.visible ? '👁' : 'ー';
+        visBtn.title = '地名表示のON/OFF';
+        visBtn.addEventListener('click', () => {
+          wpt.visible = !wpt.visible;
+          syncWaypointSelectUI();
+        });
 
-      // 地名インラインテキスト入力（直接書き換え可能）
-      const nameInput = document.createElement('input');
-      nameInput.type = 'text';
-      nameInput.className = 'wpt-inline-input';
-      nameInput.maxLength = 40;
-      nameInput.value = wpt.name;
-      nameInput.setAttribute('aria-label', 'Waypoint地名');
-      nameInput.addEventListener('input', () => {
-        wpt.name = nameInput.value.slice(0, 40);
-      });
-      nameInput.addEventListener('blur', () => {
-        wpt.name = (nameInput.value.trim() || '地点').slice(0, 40);
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.className = 'wpt-inline-input';
+        nameInput.maxLength = 40;
         nameInput.value = wpt.name;
-      });
-      nameInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') nameInput.blur();
-      });
+        nameInput.addEventListener('input', () => {
+          wpt.name = nameInput.value.slice(0, 40);
+        });
+        nameInput.addEventListener('blur', () => {
+          wpt.name = (nameInput.value.trim() || '地点').slice(0, 40);
+          nameInput.value = wpt.name;
+        });
+        nameInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') nameInput.blur();
+        });
 
-      // 削除ボタン
-      const delBtn = document.createElement('button');
-      delBtn.type = 'button';
-      delBtn.className = 'wpt-del-btn';
-      delBtn.textContent = '×';
-      delBtn.title = 'このWaypointを削除';
-      delBtn.addEventListener('click', () => {
-        State.waypoints = State.waypoints.filter(w => w.id !== wpt.id);
-        recalculateBoundsAndDistances();
-        updateMetaText();
-        syncWaypointSelectUI();
-      });
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'wpt-del-btn';
+        delBtn.textContent = '×';
+        delBtn.title = '削除';
+        delBtn.addEventListener('click', () => {
+          State.waypoints = State.waypoints.filter(w => w.id !== wpt.id);
+          recalculateBoundsAndDistances();
+          updateMetaText();
+          syncWaypointSelectUI();
+        });
 
-      row.appendChild(blinkBtn);
-      row.appendChild(visBtn);
-      row.appendChild(nameInput);
-      row.appendChild(delBtn);
-      UI.wptTableBody.appendChild(row);
+        row.appendChild(blinkBtn);
+        row.appendChild(visBtn);
+        row.appendChild(nameInput);
+        row.appendChild(delBtn);
+        UI.wptTableBody.appendChild(row);
+      }
 
-      // 互換用select同期
-      const opt = document.createElement('option');
-      opt.value = String(wpt.id);
-      opt.textContent = wpt.name;
-      UI.wptSelect.appendChild(opt);
+      if (UI.wptSelect) {
+        const opt = document.createElement('option');
+        opt.value = String(wpt.id);
+        opt.textContent = wpt.name;
+        UI.wptSelect.appendChild(opt);
+      }
     });
 
     updateBlinkCountBadge();
   }
 
-  // 一括点滅・ラベル切替ボタン
-  UI.btnBlinkAllOn.addEventListener('click', () => {
+  on(UI.btnBlinkAllOn, 'click', () => {
     State.waypoints.forEach(w => { w.blinking = true; });
     syncWaypointSelectUI();
     setStatus('すべてのWaypointの点滅をONにしました。');
   });
 
-  UI.btnBlinkAllOff.addEventListener('click', () => {
+  on(UI.btnBlinkAllOff, 'click', () => {
     State.waypoints.forEach(w => { w.blinking = false; });
     State.seekBlinking = false;
-    UI.btnToggleSeekBlink.setAttribute('aria-pressed', 'false');
-    UI.btnToggleSeekBlink.textContent = '⚡ シーク位置を点滅: OFF';
+    if (UI.btnToggleSeekBlink) {
+      UI.btnToggleSeekBlink.setAttribute('aria-pressed', 'false');
+      UI.btnToggleSeekBlink.textContent = '⚡ シーク位置を点滅: OFF';
+    }
     syncWaypointSelectUI();
     setStatus('すべての点滅をOFFにしました。');
   });
 
-  UI.btnLabelAllToggle.addEventListener('click', () => {
+  on(UI.btnLabelAllToggle, 'click', () => {
     const anyVis = State.waypoints.some(w => w.visible);
     State.waypoints.forEach(w => { w.visible = !anyVis; });
     syncWaypointSelectUI();
   });
 
-  // シーク位置への直接Waypoint追加
-  UI.btnAddWptAtSeek.addEventListener('click', () => {
+  on(UI.btnAddWptAtSeek, 'click', () => {
     if (State.trackPoints.length === 0) return;
     if (State.waypoints.length >= CONFIG.MAX_WAYPOINTS) {
       setStatus(`エラー: Waypoint上限(${CONFIG.MAX_WAYPOINTS}箇所)に達しています。`, true);
       return;
     }
     const pt = State.seekPoint || State.trackPoints[0];
-    const cleanName = (UI.newSeekWptInput.value.trim() || `地点${State.waypoints.length + 1}`).slice(0, 40);
+    const rawVal = UI.newSeekWptInput ? UI.newSeekWptInput.value.trim() : '';
+    const cleanName = (rawVal || `地点${State.waypoints.length + 1}`).slice(0, 40);
     State.waypoints.push({
       id: State.nextId++,
       lat: pt.lat,
@@ -695,32 +926,34 @@
       visible: true,
       blinking: true
     });
-    UI.newSeekWptInput.value = '';
+    if (UI.newSeekWptInput) UI.newSeekWptInput.value = '';
     recalculateBoundsAndDistances();
     updateMetaText();
     syncWaypointSelectUI();
     setStatus(`シーク位置に「${cleanName}」を追加し、点滅をONにしました。`);
   });
 
-  UI.newSeekWptInput.addEventListener('keydown', (e) => {
+  on(UI.newSeekWptInput, 'keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      UI.btnAddWptAtSeek.click();
+      if (UI.btnAddWptAtSeek) UI.btnAddWptAtSeek.click();
     }
   });
 
-  // ダブルクリック用のフローティング地点追加バー
   function openFloatingAddBar(coord) {
     State.pendingCoord = coord;
-    UI.wptNameInput.value = '山頂';
-    UI.wptEditorPanel.hidden = false;
-    UI.wptNameInput.focus();
-    UI.wptNameInput.select();
+    if (UI.wptNameInput) UI.wptNameInput.value = '山頂';
+    if (UI.wptEditorPanel) UI.wptEditorPanel.hidden = false;
+    if (UI.wptNameInput) {
+      UI.wptNameInput.focus();
+      UI.wptNameInput.select();
+    }
   }
 
   function closeFloatingAddBar(commit) {
     if (commit && State.pendingCoord && State.waypoints.length < CONFIG.MAX_WAYPOINTS) {
-      const cleanName = (UI.wptNameInput.value.trim() || `地点${State.waypoints.length + 1}`).slice(0, 40);
+      const rawVal = UI.wptNameInput ? UI.wptNameInput.value.trim() : '';
+      const cleanName = (rawVal || `地点${State.waypoints.length + 1}`).slice(0, 40);
       State.waypoints.push({
         id: State.nextId++,
         lat: State.pendingCoord.lat,
@@ -735,17 +968,17 @@
       setStatus(`「${cleanName}」を追加しました。`);
     }
     State.pendingCoord = null;
-    UI.wptEditorPanel.hidden = true;
+    if (UI.wptEditorPanel) UI.wptEditorPanel.hidden = true;
   }
 
-  UI.btnSaveWptName.addEventListener('click', () => closeFloatingAddBar(true));
-  UI.btnCancelWptName.addEventListener('click', () => closeFloatingAddBar(false));
-  UI.wptNameInput.addEventListener('keydown', (e) => {
+  on(UI.btnSaveWptName, 'click', () => closeFloatingAddBar(true));
+  on(UI.btnCancelWptName, 'click', () => closeFloatingAddBar(false));
+  on(UI.wptNameInput, 'keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); closeFloatingAddBar(true); }
     else if (e.key === 'Escape') { e.preventDefault(); closeFloatingAddBar(false); }
   });
 
-  // --- 12. プロジェクト保存 (.json) ＆ 再開機能 ---
+  // --- 13. プロジェクト保存 (.json) ＆ 再開機能 ---
   function serializeProjectData() {
     let bgPhotoDataUrl = null;
     if (State.bgBufferCanvas) {
@@ -787,20 +1020,20 @@
       style: {
         lineColor: State.lineColor,
         markerColor: State.markerColor,
-        lineWidth: parseFloat(UI.lineWidthRange.value) || 5,
-        fontSize: parseInt(UI.fontSizeRange.value, 10) || 20,
+        lineWidth: parseFloat(UI.lineWidthRange?.value) || 5,
+        fontSize: parseInt(UI.fontSizeRange?.value, 10) || 20,
         showPlate: Boolean(State.showPlate),
         showOutline: Boolean(State.showOutline)
       },
       animation: {
-        animType: UI.animTypeSelect.value,
-        animSpeed: parseFloat(UI.animSpeedRange.value) || 2.0,
-        markerSize: parseFloat(UI.markerSizeRange.value) || 10,
+        animType: UI.animTypeSelect?.value || 'pulse',
+        animSpeed: parseFloat(UI.animSpeedRange?.value) || 2.0,
+        markerSize: parseFloat(UI.markerSizeRange?.value) || 10,
         selectedWptId: State.selectedWptId,
         seekRatio: Number(State.seekRatio.toFixed(4)),
         seekBlinking: Boolean(State.seekBlinking),
-        bgMode: UI.bgModeSelect.value,
-        recordSec: parseInt(UI.recordSecRange.value, 10) || 5
+        bgMode: UI.bgModeSelect?.value || 'transparent',
+        recordSec: parseInt(UI.recordSecRange?.value, 10) || 5
       },
       backgroundPhoto: bgPhotoDataUrl ? {
         name: State.bgPhotoName || 'photo.jpg',
@@ -912,41 +1145,50 @@
   }
 
   function syncAllControlsWithState() {
-    UI.lineColorRow.querySelectorAll('.swatch').forEach((btn) => {
-      btn.setAttribute('aria-pressed', btn.dataset.color.toLowerCase() === State.lineColor ? 'true' : 'false');
-    });
-    UI.lineCustomColor.value = State.lineColor;
-    UI.lineColorBadge.textContent = State.lineColor.toUpperCase();
+    if (UI.lineColorRow) {
+      UI.lineColorRow.querySelectorAll('.swatch').forEach((btn) => {
+        btn.setAttribute('aria-pressed', btn.dataset.color.toLowerCase() === State.lineColor ? 'true' : 'false');
+      });
+    }
+    if (UI.lineCustomColor) UI.lineCustomColor.value = State.lineColor;
+    if (UI.lineColorBadge) UI.lineColorBadge.textContent = State.lineColor.toUpperCase();
 
-    UI.markerColorRow.querySelectorAll('.swatch').forEach((btn) => {
-      btn.setAttribute('aria-pressed', btn.dataset.color.toLowerCase() === State.markerColor ? 'true' : 'false');
-    });
-    UI.markerCustomColor.value = State.markerColor;
-    UI.markerColorBadge.textContent = State.markerColor.toUpperCase();
+    if (UI.markerColorRow) {
+      UI.markerColorRow.querySelectorAll('.swatch').forEach((btn) => {
+        btn.setAttribute('aria-pressed', btn.dataset.color.toLowerCase() === State.markerColor ? 'true' : 'false');
+      });
+    }
+    if (UI.markerCustomColor) UI.markerCustomColor.value = State.markerColor;
+    if (UI.markerColorBadge) UI.markerColorBadge.textContent = State.markerColor.toUpperCase();
 
     const pct = Math.round(State.view.scale * 100);
-    UI.zoomRange.value = String(State.view.scale);
-    UI.zoomNum.value = String(pct);
-    UI.zoomBadge.textContent = `${pct}%`;
+    if (UI.zoomRange) UI.zoomRange.value = String(State.view.scale);
+    if (UI.zoomNum) UI.zoomNum.value = String(pct);
+    if (UI.zoomBadge) UI.zoomBadge.textContent = `${pct}%`;
 
-    UI.lineWidthNum.value = UI.lineWidthRange.value;
-    UI.fontSizeNum.value = UI.fontSizeRange.value;
-    UI.sizeBadge.textContent = `${UI.lineWidthRange.value}px / ${UI.fontSizeRange.value}px`;
+    if (UI.lineWidthNum && UI.lineWidthRange) UI.lineWidthNum.value = UI.lineWidthRange.value;
+    if (UI.fontSizeNum && UI.fontSizeRange) UI.fontSizeNum.value = UI.fontSizeRange.value;
 
-    UI.btnTogglePlate.setAttribute('aria-pressed', String(State.showPlate));
-    UI.btnTogglePlate.textContent = `背景プレート: ${State.showPlate ? 'ON' : 'OFF'}`;
-    UI.btnToggleOutline.setAttribute('aria-pressed', String(State.showOutline));
-    UI.btnToggleOutline.textContent = `黒フチ取り: ${State.showOutline ? 'ON' : 'OFF'}`;
+    if (UI.btnTogglePlate) {
+      UI.btnTogglePlate.setAttribute('aria-pressed', String(State.showPlate));
+      UI.btnTogglePlate.textContent = `背景プレート: ${State.showPlate ? 'ON' : 'OFF'}`;
+    }
+    if (UI.btnToggleOutline) {
+      UI.btnToggleOutline.setAttribute('aria-pressed', String(State.showOutline));
+      UI.btnToggleOutline.textContent = `黒フチ取り: ${State.showOutline ? 'ON' : 'OFF'}`;
+    }
 
-    UI.routeSeekRange.value = String(Math.round(State.seekRatio * 1000));
-    UI.seekBadge.textContent = `${Math.round(State.seekRatio * 100)}%地点`;
-    UI.btnToggleSeekBlink.setAttribute('aria-pressed', String(State.seekBlinking));
-    UI.btnToggleSeekBlink.textContent = `⚡ シーク位置を点滅: ${State.seekBlinking ? 'ON' : 'OFF'}`;
+    if (UI.routeSeekRange) UI.routeSeekRange.value = String(Math.round(State.seekRatio * 1000));
+    if (UI.seekBadge) UI.seekBadge.textContent = `${Math.round(State.seekRatio * 100)}%地点`;
+    if (UI.btnToggleSeekBlink) {
+      UI.btnToggleSeekBlink.setAttribute('aria-pressed', String(State.seekBlinking));
+      UI.btnToggleSeekBlink.textContent = `⚡ シーク位置を点滅: ${State.seekBlinking ? 'ON' : 'OFF'}`;
+    }
 
-    UI.animSpeedNum.value = UI.animSpeedRange.value;
-    UI.markerSizeNum.value = UI.markerSizeRange.value;
-    UI.recordSecNum.value = UI.recordSecRange.value;
-    UI.secBadge.textContent = `${UI.recordSecRange.value}秒`;
+    if (UI.animSpeedNum && UI.animSpeedRange) UI.animSpeedNum.value = UI.animSpeedRange.value;
+    if (UI.markerSizeNum && UI.markerSizeRange) UI.markerSizeNum.value = UI.markerSizeRange.value;
+    if (UI.recordSecNum && UI.recordSecRange) UI.recordSecNum.value = UI.recordSecRange.value;
+    if (UI.secBadge && UI.recordSecRange) UI.secBadge.textContent = `${UI.recordSecRange.value}秒`;
 
     validateChromaCollision();
     updateMetaText();
@@ -979,7 +1221,7 @@
     if (restoredPhotoCanvas) {
       State.bgBufferCanvas = restoredPhotoCanvas;
       State.bgPhotoName = restoredPhotoName;
-      UI.btnClearPhoto.disabled = false;
+      if (UI.btnClearPhoto) UI.btnClearPhoto.disabled = false;
     }
 
     State.gpxFileName = validated.gpxFileName;
@@ -998,24 +1240,24 @@
     State.showPlate = validated.style.showPlate;
     State.showOutline = validated.style.showOutline;
 
-    UI.lineWidthRange.value = String(validated.style.lineWidth);
-    UI.fontSizeRange.value = String(validated.style.fontSize);
+    if (UI.lineWidthRange) UI.lineWidthRange.value = String(validated.style.lineWidth);
+    if (UI.fontSizeRange) UI.fontSizeRange.value = String(validated.style.fontSize);
 
-    UI.animTypeSelect.value = validated.animation.animType;
-    UI.animSpeedRange.value = String(validated.animation.animSpeed);
-    UI.markerSizeRange.value = String(validated.animation.markerSize);
+    if (UI.animTypeSelect) UI.animTypeSelect.value = validated.animation.animType;
+    if (UI.animSpeedRange) UI.animSpeedRange.value = String(validated.animation.animSpeed);
+    if (UI.markerSizeRange) UI.markerSizeRange.value = String(validated.animation.markerSize);
     State.selectedWptId = validated.animation.selectedWptId;
     State.seekRatio = validated.animation.seekRatio;
     State.seekBlinking = validated.animation.seekBlinking;
-    UI.bgModeSelect.value = validated.animation.bgMode;
-    UI.recordSecRange.value = String(validated.animation.recordSec);
+    if (UI.bgModeSelect) UI.bgModeSelect.value = validated.animation.bgMode;
+    if (UI.recordSecRange) UI.recordSecRange.value = String(validated.animation.recordSec);
 
     closeFloatingAddBar(false);
     recalculateBoundsAndDistances();
     syncAllControlsWithState();
   }
 
-  UI.btnSaveProject.addEventListener('click', () => {
+  on(UI.btnSaveProject, 'click', () => {
     if (State.isRecording) return;
     if (State.trackPoints.length < 2) {
       setStatus('保存するルートデータがありません。先にGPXファイルを読み込んでください。', true);
@@ -1032,16 +1274,16 @@
     }
   });
 
-  UI.btnLoadProject.addEventListener('click', () => {
-    if (!State.isRecording) UI.projectInput.click();
+  on(UI.btnLoadProject, 'click', () => {
+    if (!State.isRecording && UI.projectInput) UI.projectInput.click();
   });
 
-  UI.projectInput.addEventListener('change', (e) => {
+  on(UI.projectInput, 'change', (e) => {
     if (e.target.files && e.target.files.length > 0) processUploadedFiles(e.target.files);
-    UI.projectInput.value = '';
+    e.target.value = '';
   });
 
-  // --- 13. 外部サンプルGPX (sample_routegpx.gpx) 読込＆不在時待機 ---
+  // --- 14. 外部サンプルGPX (sample_routegpx.gpx) 読込＆不在時待機 ---
   function resetToEmptyWaitingState() {
     State.gpxFileName = '';
     State.rawPointCount = 0;
@@ -1053,10 +1295,12 @@
     State.seekRatio = 0.5;
     State.seekPoint = null;
     State.seekBlinking = false;
-    UI.routeSeekRange.value = '500';
-    UI.seekBadge.textContent = '50%地点';
-    UI.btnToggleSeekBlink.setAttribute('aria-pressed', 'false');
-    UI.btnToggleSeekBlink.textContent = '⚡ シーク位置を点滅: OFF';
+    if (UI.routeSeekRange) UI.routeSeekRange.value = '500';
+    if (UI.seekBadge) UI.seekBadge.textContent = '50%地点';
+    if (UI.btnToggleSeekBlink) {
+      UI.btnToggleSeekBlink.setAttribute('aria-pressed', 'false');
+      UI.btnToggleSeekBlink.textContent = '⚡ シーク位置を点滅: OFF';
+    }
     closeFloatingAddBar(false);
     ctx.clearRect(0, 0, CONFIG.CANVAS_W, CONFIG.CANVAS_H);
     applyPreset('br');
@@ -1086,187 +1330,40 @@
       setStatus(`サンプル山行データ（${CONFIG.SAMPLE_GPX_FILE}）を読み込みました。`);
     } catch (_) {
       if (State.trackPoints.length === 0) resetToEmptyWaitingState();
-      setStatus('GPXファイル（または保存したプロジェクト .json）を画面にドロップして読み込んでください。', false);
+      setStatus('GPXファイル（または保存したプロジェクト .json）をドロップまたは選択して読み込んでください。', false);
     }
   }
 
-  UI.btnSample.addEventListener('click', loadSampleMountainData);
-  UI.btnResetAll.addEventListener('click', () => {
+  on(UI.btnSample, 'click', loadSampleMountainData);
+  on(UI.btnResetAll, 'click', () => {
     if (State.isRecording) return;
     releasePhotoMemory();
     resetToEmptyWaitingState();
-    UI.testBox.hidden = true;
+    if (UI.testBox) UI.testBox.hidden = true;
     loadSampleMountainData();
   });
 
-  // --- 14. セキュアファイルローダー＆画面全体ドラッグ＆ドロップ ---
-  function sanitizeXmlString(xmlText) {
-    if (xmlText.length > CONFIG.MAX_XML_LENGTH) throw new Error('XMLサイズが上限を超えています。');
-    if (/<!(DOCTYPE|ENTITY)\b/i.test(xmlText)) {
-      throw new Error('DOCTYPEまたはENTITY宣言を含むXMLは読み込めません。');
-    }
-    return xmlText;
-  }
-
-  async function processUploadedFiles(fileList) {
-    if (!fileList || fileList.length === 0 || State.isRecording) return;
-    const currentSession = ++State.loadSessionId;
-
-    for (const file of Array.from(fileList)) {
-      if (currentSession !== State.loadSessionId) return;
-      const lowerName = file.name.toLowerCase();
-
-      if (lowerName.endsWith('.json') || file.type === 'application/json') {
-        if (file.size > CONFIG.MAX_PROJECT_BYTES) {
-          setStatus(`エラー: プロジェクト「${file.name}」が上限(25MB)を超えています。`, true);
-          continue;
-        }
-        try {
-          const jsonText = await file.text();
-          if (currentSession !== State.loadSessionId) return;
-          const validated = parseAndValidateProjectJson(jsonText);
-          await applyValidatedProject(validated, currentSession);
-          setStatus(`プロジェクト「${file.name}」を復元しました。`);
-        } catch (err) {
-          setStatus(`プロジェクト読込エラー: ${err.message}`, true);
-        }
-      } else if (lowerName.endsWith('.gpx') || file.type.includes('xml')) {
-        if (file.size > CONFIG.MAX_GPX_BYTES) {
-          setStatus(`エラー: GPX「${file.name}」が上限(25MB)を超えています。`, true);
-          continue;
-        }
-        try {
-          const rawText = await file.text();
-          if (currentSession !== State.loadSessionId) return;
-          const safeText = sanitizeXmlString(rawText);
-          const xml = new DOMParser().parseFromString(safeText, 'text/xml');
-          if (xml.querySelector('parsererror')) throw new Error('GPXのXML構造が破損しています。');
-
-          let nodes = Array.from(xml.querySelectorAll('trkpt'));
-          if (nodes.length === 0) nodes = Array.from(xml.querySelectorAll('rtept'));
-
-          const rawPts = [];
-          for (let i = 0; i < nodes.length; i++) {
-            const lat = parseFloat(nodes[i].getAttribute('lat'));
-            const lon = parseFloat(nodes[i].getAttribute('lon'));
-            if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
-              rawPts.push({ lat, lon });
-            }
-          }
-          if (rawPts.length < 2) throw new Error('有効なGPS座標（2点以上）が見つかりません。');
-
-          const wptNodes = Array.from(xml.querySelectorAll('wpt'));
-          const wpts = [];
-          for (let i = 0; i < wptNodes.length && wpts.length < CONFIG.MAX_WAYPOINTS; i++) {
-            const lat = parseFloat(wptNodes[i].getAttribute('lat'));
-            const lon = parseFloat(wptNodes[i].getAttribute('lon'));
-            if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
-              const name = (wptNodes[i].querySelector('name')?.textContent || `地点${i + 1}`).trim().slice(0, 40);
-              wpts.push({ id: State.nextId++, lat, lon, name, visible: true, blinking: i === 0 });
-            }
-          }
-
-          State.gpxFileName = file.name;
-          State.rawPointCount = rawPts.length;
-          State.trackPoints = simplifyTrackWithAnchors(rawPts, wpts, CONFIG.MAX_RENDER_PTS);
-
-          if (wpts.length === 0) {
-            const tp = State.trackPoints;
-            const mid = Math.floor(tp.length * 0.5);
-            wpts.push({ id: State.nextId++, ...tp[0], name: 'スタート', visible: true, blinking: false });
-            wpts.push({ id: State.nextId++, ...tp[mid], name: '山頂・中間地点', visible: true, blinking: true });
-            wpts.push({ id: State.nextId++, ...tp[tp.length - 1], name: 'ゴール', visible: true, blinking: false });
-          }
-
-          State.waypoints = wpts;
-          State.selectedWptId = wpts[0].id;
-          closeFloatingAddBar(false);
-          recalculateBoundsAndDistances();
-          updateMetaText();
-          syncWaypointSelectUI();
-          setStatus(`GPX「${file.name}」(${State.rawPointCount.toLocaleString()}点) を読み込みました。`);
-        } catch (err) {
-          setStatus(`GPX読込エラー: ${err.message}`, true);
-        }
-      } else if (file.type.startsWith('image/')) {
-        if (file.size > CONFIG.MAX_PHOTO_BYTES) {
-          setStatus(`エラー: 画像「${file.name}」が上限(30MB)を超えています。`, true);
-          continue;
-        }
-        releasePhotoMemory();
-        const tempUrl = URL.createObjectURL(file);
-        const img = new Image();
-        await new Promise((resolve) => {
-          img.onload = () => {
-            if (currentSession === State.loadSessionId && img.naturalWidth > 0 && img.naturalHeight > 0) {
-              State.bgBufferCanvas = createPrescaledPhotoBuffer(img);
-              State.bgPhotoName = file.name;
-              UI.btnClearPhoto.disabled = false;
-              updateMetaText();
-              renderPresetThumbnails();
-              setStatus(`背景写真「${file.name}」をセットしました。`);
-            }
-            URL.revokeObjectURL(tempUrl);
-            img.onload = null; img.onerror = null; img.src = '';
-            resolve();
-          };
-          img.onerror = () => {
-            URL.revokeObjectURL(tempUrl);
-            img.onload = null; img.onerror = null;
-            setStatus('画像の読み込みに失敗しました。', true);
-            resolve();
-          };
-          img.src = tempUrl;
-        });
-      }
-    }
-    UI.fileInput.value = '';
-  }
-
-  UI.fileInput.addEventListener('change', (e) => processUploadedFiles(e.target.files));
-
-  // ウィンドウ全体へのドラッグ＆ドロップ対応
-  let dragCounter = 0;
-  window.addEventListener('dragenter', (e) => {
-    e.preventDefault();
-    if (State.isRecording) return;
-    dragCounter++;
-    UI.dropOverlay.hidden = false;
-  });
-  window.addEventListener('dragover', (e) => { e.preventDefault(); });
-  window.addEventListener('dragleave', (e) => {
-    e.preventDefault();
-    dragCounter = Math.max(0, dragCounter - 1);
-    if (dragCounter === 0) UI.dropOverlay.hidden = true;
-  });
-  window.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dragCounter = 0;
-    UI.dropOverlay.hidden = true;
-    if (e.dataTransfer && e.dataTransfer.files) {
-      processUploadedFiles(e.dataTransfer.files);
-    }
-  });
-
-  UI.btnClearPhoto.addEventListener('click', () => {
+  on(UI.btnClearPhoto, 'click', () => {
     releasePhotoMemory();
     setStatus('背景写真を解除し、メモリを解放しました。');
   });
 
   // --- 15. カラースウォッチ＆数値スピンボックス双方向バインディング ---
   function bindColorControls(rowEl, pickerEl, onPick) {
-    rowEl.addEventListener('click', (e) => {
+    on(rowEl, 'click', (e) => {
       const btn = e.target.closest('button[data-color]');
       if (!btn) return;
       const hex = btn.dataset.color.toLowerCase();
       rowEl.querySelectorAll('.swatch').forEach(b => b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
-      pickerEl.value = hex;
+      if (pickerEl) pickerEl.value = hex;
       onPick(hex);
       validateChromaCollision();
     });
-    pickerEl.addEventListener('input', (e) => {
+    on(pickerEl, 'input', (e) => {
       const hex = e.target.value.toLowerCase();
-      rowEl.querySelectorAll('.swatch').forEach(b => b.setAttribute('aria-pressed', b.dataset.color.toLowerCase() === hex ? 'true' : 'false'));
+      if (rowEl) {
+        rowEl.querySelectorAll('.swatch').forEach(b => b.setAttribute('aria-pressed', b.dataset.color.toLowerCase() === hex ? 'true' : 'false'));
+      }
       onPick(hex);
       validateChromaCollision();
     });
@@ -1274,14 +1371,14 @@
 
   bindColorControls(UI.lineColorRow, UI.lineCustomColor, (hex) => {
     State.lineColor = hex;
-    UI.lineColorBadge.textContent = hex.toUpperCase();
+    if (UI.lineColorBadge) UI.lineColorBadge.textContent = hex.toUpperCase();
     renderPresetThumbnails();
   });
 
   bindColorControls(UI.markerColorRow, UI.markerCustomColor, (hex) => {
     State.markerColor = hex;
     State.markerRgb = parseHexRgb(hex);
-    UI.markerColorBadge.textContent = hex.toUpperCase();
+    if (UI.markerColorBadge) UI.markerColorBadge.textContent = hex.toUpperCase();
     renderPresetThumbnails();
   });
 
@@ -1292,12 +1389,12 @@
     State.view.offsetY = p.offsetY;
     State.view.scale = p.scale;
     const pct = Math.round(p.scale * 100);
-    UI.zoomRange.value = String(p.scale);
-    UI.zoomNum.value = String(pct);
-    UI.zoomBadge.textContent = `${pct}%`;
+    if (UI.zoomRange) UI.zoomRange.value = String(p.scale);
+    if (UI.zoomNum) UI.zoomNum.value = String(pct);
+    if (UI.zoomBadge) UI.zoomBadge.textContent = `${pct}%`;
   }
 
-  UI.presetThumbs.addEventListener('click', (e) => {
+  on(UI.presetThumbs, 'click', (e) => {
     const btn = e.target.closest('button[data-preset]');
     if (btn) {
       applyPreset(btn.dataset.preset);
@@ -1305,29 +1402,27 @@
     }
   });
 
-  // スケール双方向連動
-  UI.zoomRange.addEventListener('input', (e) => {
+  on(UI.zoomRange, 'input', (e) => {
     State.view.scale = clampNumber(e.target.value, 0.15, 3.0, 0.55);
     const pct = Math.round(State.view.scale * 100);
-    UI.zoomNum.value = String(pct);
-    UI.zoomBadge.textContent = `${pct}%`;
+    if (UI.zoomNum) UI.zoomNum.value = String(pct);
+    if (UI.zoomBadge) UI.zoomBadge.textContent = `${pct}%`;
   });
-  UI.zoomNum.addEventListener('input', (e) => {
+  on(UI.zoomNum, 'input', (e) => {
     const pct = clampNumber(e.target.value, 15, 300, 55);
     State.view.scale = pct / 100;
-    UI.zoomRange.value = String(State.view.scale);
-    UI.zoomBadge.textContent = `${Math.round(pct)}%`;
+    if (UI.zoomRange) UI.zoomRange.value = String(State.view.scale);
+    if (UI.zoomBadge) UI.zoomBadge.textContent = `${Math.round(pct)}%`;
   });
 
-  // 双方向レンジ＆数値スピンボックスバインダー
   function bindRangeAndNumber(rangeEl, numEl, min, max, onUpdate) {
-    rangeEl.addEventListener('input', () => {
-      numEl.value = rangeEl.value;
+    on(rangeEl, 'input', () => {
+      if (numEl) numEl.value = rangeEl.value;
       if (onUpdate) onUpdate();
     });
-    numEl.addEventListener('input', () => {
-      const val = clampNumber(numEl.value, min, max, parseFloat(rangeEl.value));
-      rangeEl.value = String(val);
+    on(numEl, 'input', () => {
+      const val = clampNumber(numEl.value, min, max, parseFloat(rangeEl?.value || min));
+      if (rangeEl) rangeEl.value = String(val);
       if (onUpdate) onUpdate();
     });
   }
@@ -1337,56 +1432,58 @@
   bindRangeAndNumber(UI.animSpeedRange, UI.animSpeedNum, 0.5, 5.0);
   bindRangeAndNumber(UI.markerSizeRange, UI.markerSizeNum, 5, 26);
   bindRangeAndNumber(UI.recordSecRange, UI.recordSecNum, 2, 30, () => {
-    UI.secBadge.textContent = `${UI.recordSecRange.value}秒`;
+    if (UI.secBadge && UI.recordSecRange) UI.secBadge.textContent = `${UI.recordSecRange.value}秒`;
   });
 
-  UI.btnTogglePlate.addEventListener('click', () => {
+  on(UI.btnTogglePlate, 'click', () => {
     State.showPlate = !State.showPlate;
     UI.btnTogglePlate.setAttribute('aria-pressed', String(State.showPlate));
     UI.btnTogglePlate.textContent = `背景プレート: ${State.showPlate ? 'ON' : 'OFF'}`;
     renderPresetThumbnails();
   });
 
-  UI.btnToggleOutline.addEventListener('click', () => {
+  on(UI.btnToggleOutline, 'click', () => {
     State.showOutline = !State.showOutline;
     UI.btnToggleOutline.setAttribute('aria-pressed', String(State.showOutline));
     UI.btnToggleOutline.textContent = `黒フチ取り: ${State.showOutline ? 'ON' : 'OFF'}`;
   });
 
-  UI.btnToggleGuide.addEventListener('click', () => {
+  on(UI.btnToggleGuide, 'click', () => {
     State.showGuide = !State.showGuide;
     UI.btnToggleGuide.setAttribute('aria-pressed', String(State.showGuide));
     UI.btnToggleGuide.textContent = `📏 セーフティ枠: ${State.showGuide ? 'ON' : 'OFF'}`;
-    UI.safetyGuideOverlay.hidden = !State.showGuide || State.trackPoints.length === 0;
+    if (UI.safetyGuideOverlay) UI.safetyGuideOverlay.hidden = !State.showGuide || State.trackPoints.length === 0;
   });
 
-  UI.btnResetAnim.addEventListener('click', () => {
+  on(UI.btnResetAnim, 'click', () => {
     State.animStartTime = performance.now();
     setStatus('アニメーション周期を先頭（0秒）にリセットしました。');
   });
 
-  UI.routeSeekRange.addEventListener('input', (e) => {
+  on(UI.routeSeekRange, 'input', (e) => {
     if (State.trackPoints.length === 0) return;
     State.seekRatio = clampNumber(parseFloat(e.target.value) / 1000, 0, 1, 0.5);
     const interp = getPointAtDistanceRatio(State.seekRatio);
     State.seekPoint = { lat: interp.lat, lon: interp.lon };
-    UI.seekBadge.textContent = `${Math.round(State.seekRatio * 100)}%地点`;
+    if (UI.seekBadge) UI.seekBadge.textContent = `${Math.round(State.seekRatio * 100)}%地点`;
     if (!State.seekBlinking) {
       State.seekBlinking = true;
-      UI.btnToggleSeekBlink.setAttribute('aria-pressed', 'true');
-      UI.btnToggleSeekBlink.textContent = '⚡ シーク位置を点滅: ON';
+      if (UI.btnToggleSeekBlink) {
+        UI.btnToggleSeekBlink.setAttribute('aria-pressed', 'true');
+        UI.btnToggleSeekBlink.textContent = '⚡ シーク位置を点滅: ON';
+      }
       updateBlinkCountBadge();
     }
   });
 
-  UI.btnToggleSeekBlink.addEventListener('click', () => {
+  on(UI.btnToggleSeekBlink, 'click', () => {
     State.seekBlinking = !State.seekBlinking;
     UI.btnToggleSeekBlink.setAttribute('aria-pressed', String(State.seekBlinking));
     UI.btnToggleSeekBlink.textContent = `⚡ シーク位置を点滅: ${State.seekBlinking ? 'ON' : 'OFF'}`;
     updateBlinkCountBadge();
   });
 
-  UI.bgModeSelect.addEventListener('change', validateChromaCollision);
+  on(UI.bgModeSelect, 'change', validateChromaCollision);
 
   // --- 16. キャンバス操作＆PCキーボードショートカット ---
   let isDragging = false;
@@ -1400,7 +1497,7 @@
     };
   }
 
-  canvas.addEventListener('pointerdown', (e) => {
+  on(canvas, 'pointerdown', (e) => {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
     isDragging = true;
     canvas.setPointerCapture(e.pointerId);
@@ -1409,7 +1506,7 @@
     dragStart.y = pt.y - State.view.offsetY;
   });
 
-  canvas.addEventListener('pointermove', (e) => {
+  on(canvas, 'pointermove', (e) => {
     if (!isDragging) return;
     const pt = getCanvasCoords(e.clientX, e.clientY);
     State.view.offsetX = clampNumber(pt.x - dragStart.x, -2000, 4000, 960);
@@ -1421,27 +1518,26 @@
     isDragging = false;
     if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
   }
-  canvas.addEventListener('pointerup', stopDragging);
-  canvas.addEventListener('pointercancel', stopDragging);
+  on(canvas, 'pointerup', stopDragging);
+  on(canvas, 'pointercancel', stopDragging);
 
-  canvas.addEventListener('wheel', (e) => {
+  on(canvas, 'wheel', (e) => {
     e.preventDefault();
     const factor = e.deltaY < 0 ? 1.06 : 0.94;
     State.view.scale = clampNumber(State.view.scale * factor, 0.15, 3.0, 0.55);
     const pct = Math.round(State.view.scale * 100);
-    UI.zoomRange.value = String(State.view.scale);
-    UI.zoomNum.value = String(pct);
-    UI.zoomBadge.textContent = `${pct}%`;
+    if (UI.zoomRange) UI.zoomRange.value = String(State.view.scale);
+    if (UI.zoomNum) UI.zoomNum.value = String(pct);
+    if (UI.zoomBadge) UI.zoomBadge.textContent = `${pct}%`;
   }, { passive: false });
 
-  canvas.addEventListener('dblclick', (e) => {
+  on(canvas, 'dblclick', (e) => {
     if (State.trackPoints.length === 0) return;
     const pt = getCanvasCoords(e.clientX, e.clientY);
     openFloatingAddBar(unprojectFromMain(pt.x, pt.y));
   });
 
-  // グローバルキーボードショートカット（テキスト入力中は発火させない）
-  window.addEventListener('keydown', (e) => {
+  on(window, 'keydown', (e) => {
     const tag = document.activeElement?.tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
 
@@ -1450,9 +1546,9 @@
     else if (e.key === 'ArrowRight') { e.preventDefault(); State.view.offsetX += step; }
     else if (e.key === 'ArrowUp') { e.preventDefault(); State.view.offsetY -= step; }
     else if (e.key === 'ArrowDown') { e.preventDefault(); State.view.offsetY += step; }
-    else if (e.key === ' ') { e.preventDefault(); UI.btnResetAnim.click(); }
-    else if (e.key === 'g' || e.key === 'G') { e.preventDefault(); UI.btnToggleGuide.click(); }
-    else if (e.key === 'p' || e.key === 'P') { e.preventDefault(); UI.btnTogglePlate.click(); }
+    else if (e.key === ' ') { e.preventDefault(); if (UI.btnResetAnim) UI.btnResetAnim.click(); }
+    else if (e.key === 'g' || e.key === 'G') { e.preventDefault(); if (UI.btnToggleGuide) UI.btnToggleGuide.click(); }
+    else if (e.key === 'p' || e.key === 'P') { e.preventDefault(); if (UI.btnTogglePlate) UI.btnTogglePlate.click(); }
   });
 
   // --- 17. クロマキー対応レンダリングエンジン ---
@@ -1541,7 +1637,7 @@
     if (tp.length === 0) return;
 
     const elapsed = (timestamp - State.animStartTime) / 1000;
-    const bgMode = UI.bgModeSelect.value;
+    const bgMode = UI.bgModeSelect?.value || 'transparent';
     const isChromaKey = !State.bgBufferCanvas && (bgMode === 'green' || bgMode === 'blue');
     const isUnshieldedChroma = isChromaKey && !State.showPlate;
 
@@ -1568,9 +1664,9 @@
       ctx.restore();
     }
 
-    const lineWidth = parseFloat(UI.lineWidthRange.value) || 5;
-    const animType = UI.animTypeSelect.value;
-    const speed = parseFloat(UI.animSpeedRange.value) || 2.0;
+    const lineWidth = parseFloat(UI.lineWidthRange?.value) || 5;
+    const animType = UI.animTypeSelect?.value || 'pulse';
+    const speed = parseFloat(UI.animSpeedRange?.value) || 2.0;
 
     let progressHead = null;
     let drawEndIndex = tp.length - 1;
@@ -1613,7 +1709,7 @@
     ctx.stroke();
     ctx.restore();
 
-    const fontSize = parseInt(UI.fontSizeRange.value, 10) || 20;
+    const fontSize = parseInt(UI.fontSizeRange?.value, 10) || 20;
     const wp = State.waypoints;
     ctx.save();
     ctx.font = `bold ${fontSize}px system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif`;
@@ -1635,7 +1731,7 @@
     }
     ctx.restore();
 
-    const markerSize = parseFloat(UI.markerSizeRange.value) || 10;
+    const markerSize = parseFloat(UI.markerSizeRange?.value) || 10;
     if (animType === 'progress' && progressHead) {
       const pt = projectToMain(progressHead.lat, progressHead.lon);
       drawBlinkingMarker(pt.x, pt.y, elapsed, 'pulse', speed, markerSize, isUnshieldedChroma);
@@ -1660,12 +1756,12 @@
     State.rafId = requestAnimationFrame(loop);
   }
 
-  document.addEventListener('visibilitychange', () => {
+  on(document, 'visibilitychange', () => {
     State.isPageVisible = !document.hidden;
     if (State.isPageVisible && !State.rafId) State.rafId = requestAnimationFrame(loop);
   });
 
-  // --- 18. 動画＆静止画エクスポート ---
+  // --- 18. 動画＆静止画エクスポート（上部バー＆右パネル下部ボタン両対応） ---
   function getSupportedVideoMime() {
     const list = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'];
     for (const m of list) {
@@ -1674,13 +1770,13 @@
     return '';
   }
 
-  UI.btnExportVideo.addEventListener('click', () => {
+  function startOrStopVideoExport() {
     if (State.isRecording && State.mediaRecorder) {
       State.mediaRecorder.stop();
       return;
     }
     if (State.trackPoints.length < 2) {
-      setStatus('先にGPXデータを読み込んでください。', true);
+      setStatus('先にGPXファイルをドロップまたは選択して読み込んでください。', true);
       return;
     }
     const mimeType = getSupportedVideoMime();
@@ -1689,7 +1785,7 @@
       return;
     }
 
-    const sec = Math.min(30, Math.max(2, parseInt(UI.recordSecRange.value, 10) || 5));
+    const sec = Math.min(30, Math.max(2, parseInt(UI.recordSecRange?.value, 10) || 5));
 
     try {
       const stream = canvas.captureStream(CONFIG.FPS);
@@ -1714,11 +1810,12 @@
 
       State.animStartTime = performance.now();
       State.isRecording = true;
-      UI.fileZone.classList.add('disabled');
-      UI.fileInput.disabled = true;
-      UI.btnSaveProject.disabled = true;
-      UI.btnLoadProject.disabled = true;
-      UI.btnExportVideo.textContent = '⏹ 録画停止して保存';
+      if (UI.fileZone) UI.fileZone.classList.add('disabled');
+      if (UI.fileInput) UI.fileInput.disabled = true;
+      if (UI.btnSaveProject) UI.btnSaveProject.disabled = true;
+      if (UI.btnLoadProject) UI.btnLoadProject.disabled = true;
+      if (UI.btnExportVideo) UI.btnExportVideo.textContent = '⏹ 録画停止して保存';
+      if (UI.btnExportVideoSide) UI.btnExportVideoSide.textContent = '⏹ 録画停止して今すぐ保存';
 
       recorder.start(200);
       setStatus(`🔴 録画中（${sec}秒間）... 再クリックすると即時保存します。`);
@@ -1732,11 +1829,11 @@
       releaseRecordingMemory();
       setStatus(`録画開始エラー: ${err.message}`, true);
     }
-  });
+  }
 
-  UI.btnExportPng.addEventListener('click', () => {
+  function exportPngSnapshot() {
     if (State.trackPoints.length < 2) {
-      setStatus('先にGPXデータを読み込んでください。', true);
+      setStatus('先にGPXファイルをドロップまたは選択して読み込んでください。', true);
       return;
     }
     canvas.toBlob((blob) => {
@@ -1744,10 +1841,16 @@
       triggerBlobDownload(blob, `gpx_snapshot_${Date.now()}.png`);
       setStatus('現在のフレームを静止画 (.png) として保存しました。');
     }, 'image/png');
-  });
+  }
+
+  on(UI.btnExportVideo, 'click', startOrStopVideoExport);
+  on(UI.btnExportVideoSide, 'click', startOrStopVideoExport);
+  on(UI.btnExportPng, 'click', exportPngSnapshot);
+  on(UI.btnExportPngSide, 'click', exportPngSnapshot);
 
   // --- 19. 自己診断テストスイート (全7項目) ---
-  UI.btnSelfTest.addEventListener('click', () => {
+  on(UI.btnSelfTest, 'click', () => {
+    if (!UI.testBox) return;
     if (!UI.testBox.hidden) {
       UI.testBox.hidden = true;
       return;
@@ -1803,7 +1906,7 @@
     setStatus('自己診断テスト（全7項目）を完了しました。右ペイン下部のレポートをご確認ください。');
   });
 
-  window.addEventListener('pagehide', () => {
+  on(window, 'pagehide', () => {
     if (State.rafId) cancelAnimationFrame(State.rafId);
     releasePhotoMemory();
     releaseRecordingMemory();
