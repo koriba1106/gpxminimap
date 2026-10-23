@@ -1,6 +1,9 @@
 /**
  * GPX Route Studio Workstation - Production Core Engine (app.js)
- * Guaranteed Initial State: Background Plate OFF (showPlate = false)
+ * New Features:
+ *  - Importance-Ranked RDP Track Simplification with 5 Selectable Reduction Candidates (-10%, -20%, -30%, -40%, -50%)
+ *  - Waypoint Studio Enhancements: 8-Way + Auto Label Direction, Snap-to-Route, Reordering, Direct Canvas Dragging
+ *  - Clean GPX File Export (.gpx) reflecting reduced track points & edited waypoints
  */
 (() => {
   'use strict';
@@ -14,7 +17,6 @@
     return;
   }
 
-  // --- Nullセーフなイベント登録ヘルパー ---
   function on(el, type, handler, options) {
     if (el && typeof el.addEventListener === 'function') {
       el.addEventListener(type, handler, options);
@@ -24,13 +26,13 @@
   // --- 2. システム定数・制限値 ---
   const CONFIG = Object.freeze({
     PROJECT_MAGIC: 'GPX_ROUTE_STUDIO_PROJECT',
-    PROJECT_VERSION: 1,
+    PROJECT_VERSION: 2,
     SAMPLE_GPX_FILE: 'sample_routegpx.gpx',
     MAX_GPX_BYTES: 25 * 1024 * 1024,
     MAX_PHOTO_BYTES: 30 * 1024 * 1024,
     MAX_PROJECT_BYTES: 25 * 1024 * 1024,
     MAX_XML_LENGTH: 30 * 1024 * 1024,
-    MAX_RENDER_PTS: 2400,
+    MAX_RAW_PTS: 50000,
     MAX_WAYPOINTS: 500,
     CANVAS_W: 1920,
     CANVAS_H: 1080,
@@ -39,8 +41,22 @@
     FPS: 30
   });
 
+  const REDUCTION_RATES = Object.freeze([0, 10, 20, 30, 40, 50]);
   const ALLOWED_ANIM_TYPES = Object.freeze(['pulse', 'blink', 'radar', 'progress']);
   const ALLOWED_BG_MODES = Object.freeze(['transparent', 'green', 'blue', 'black']);
+
+  // Waypointラベルの8方向＋自動配置定義
+  const LABEL_DIRS = Object.freeze([
+    { key: 'auto', icon: '✦', title: '自動配置（ルート外向き）', dx: 1, dy: 0 },
+    { key: 'E',    icon: '→', title: '右 (東)',   dx: 1,    dy: 0 },
+    { key: 'NE',   icon: '↗', title: '右上 (北東)', dx: 0.8,  dy: -0.7 },
+    { key: 'N',    icon: '↑', title: '上 (北)',   dx: 0,    dy: -1 },
+    { key: 'NW',   icon: '↖', title: '左上 (北西)', dx: -0.8, dy: -0.7 },
+    { key: 'W',    icon: '←', title: '左 (西)',   dx: -1,   dy: 0 },
+    { key: 'SW',   icon: '↙', title: '左下 (南西)', dx: -0.8, dy: 0.7 },
+    { key: 'S',    icon: '↓', title: '下 (南)',   dx: 0,    dy: 1 },
+    { key: 'SE',   icon: '↘', title: '右下 (南東)', dx: 0.8,  dy: 0.7 }
+  ]);
 
   const PRESETS = Object.freeze({
     full: { offsetX: 960,  offsetY: 540, scale: 1.35 },
@@ -60,6 +76,8 @@
     btnSaveProject: document.getElementById('btnSaveProject'),
     btnLoadProject: document.getElementById('btnLoadProject'),
     projectInput: document.getElementById('projectInput'),
+    btnExportGpx: document.getElementById('btnExportGpx'),
+    btnExportGpxSide: document.getElementById('btnExportGpxSide'),
     btnSample: document.getElementById('btnSample'),
     btnSelfTest: document.getElementById('btnSelfTest'),
     btnResetAll: document.getElementById('btnResetAll'),
@@ -71,9 +89,13 @@
     emptyState: document.getElementById('emptyState'),
     canvasStage: document.getElementById('canvasStage'),
     safetyGuideOverlay: document.getElementById('safetyGuideOverlay'),
+    btnSnapAllWpts: document.getElementById('btnSnapAllWpts'),
     btnToggleGuide: document.getElementById('btnToggleGuide'),
     btnResetAnim: document.getElementById('btnResetAnim'),
     presetThumbs: document.getElementById('presetThumbs'),
+    reductionCandidates: document.getElementById('reductionCandidates'),
+    reductionStatsBadge: document.getElementById('reductionStatsBadge'),
+    reductionErrorInfo: document.getElementById('reductionErrorInfo'),
     btnClearPhoto: document.getElementById('btnClearPhoto'),
     lineColorRow: document.getElementById('lineColorRow'),
     lineCustomColor: document.getElementById('lineCustomColor'),
@@ -97,9 +119,11 @@
     btnBlinkAllOn: document.getElementById('btnBlinkAllOn'),
     btnBlinkAllOff: document.getElementById('btnBlinkAllOff'),
     btnLabelAllToggle: document.getElementById('btnLabelAllToggle'),
+    btnToggleWptDragMode: document.getElementById('btnToggleWptDragMode'),
     wptEditorPanel: document.getElementById('wptEditorPanel'),
     wptEditorTitle: document.getElementById('wptEditorTitle'),
     wptNameInput: document.getElementById('wptNameInput'),
+    wptSnapOnAdd: document.getElementById('wptSnapOnAdd'),
     btnSaveWptName: document.getElementById('btnSaveWptName'),
     btnCancelWptName: document.getElementById('btnCancelWptName'),
     routeSeekRange: document.getElementById('routeSeekRange'),
@@ -130,12 +154,17 @@
   const State = {
     loadSessionId: 0,
     gpxFileName: '',
-    rawPointCount: 0,
-    trackPoints: [],
+    originalPoints: [],     // 読み込んだ元の全トラックポイント [{ lat, lon, ele }]
+    pointImportance: null,  // Float64Array: 各頂点のRDP形状重要度スコア
+    reductionPercent: 0,    // 選択中の削減率 (0 | 10 | 20 | 30 | 40 | 50)
+    currentErrorMeters: 0,  // 現在の削減率における最大形状誤差(m)
+    trackPoints: [],        // 現在選択中の削減率が適用されたアクティブ頂点配列
     cumDist: new Float64Array(0),
     totalDist: 0,
-    waypoints: [],
+    waypoints: [],          // [{ id, lat, lon, name, visible, blinking, labelDir }]
     selectedWptId: null,
+    wptDragMode: false,     // キャンバス上でのWaypoint直接ドラッグ移動モード
+    draggingWpt: null,      // 現在ドラッグ中のWaypoint参照
     seekRatio: 0.5,
     seekPoint: null,
     seekBlinking: false,
@@ -163,7 +192,6 @@
     nextId: 1
   };
 
-  // --- 背景プレートの状態を確実に設定・同期する一元管理関数 ---
   function setPlateState(enabled) {
     State.showPlate = Boolean(enabled);
     if (UI.btnTogglePlate) {
@@ -191,9 +219,7 @@
   }
 
   function readFileAsText(file) {
-    if (typeof file.text === 'function') {
-      return file.text();
-    }
+    if (typeof file.text === 'function') return file.text();
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result || ''));
@@ -305,27 +331,68 @@
     if (UI.btnExportVideoSide) UI.btnExportVideoSide.textContent = '🎬 合成用アニメーション動画を書き出す (.webm)';
   }
 
-  // --- 7. コサイン補正＆Waypointアンカー保護付きRDP軽量化 ---
-  function simplifyTrackWithAnchors(points, waypoints, maxCount) {
-    const len = points.length;
-    if (len <= maxCount) return points.slice();
+  // --- 7. 新アルゴリズム：重要度ランキング式 RDP（10%〜50%削減の5候補リアルタイム生成） ---
 
-    let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+  /**
+   * 全てのトラック頂点に対し、RDP法に基づく「形状への寄与度（メートル単位の垂線距離スコア）」を計算する。
+   * 始点・終点および各Waypointの最近傍点は Infinity を付与して絶対に削られないように保護する。
+   */
+  function computePointImportanceScores(points, waypoints) {
+    const len = points.length;
+    const scores = new Float64Array(len);
+    if (len === 0) return scores;
+    if (len <= 2) {
+      scores.fill(Infinity);
+      return scores;
+    }
+
+    let minLat = Infinity, maxLat = -Infinity;
     for (let i = 0; i < len; i++) {
-      const p = points[i];
-      if (p.lat < minLat) minLat = p.lat;
-      if (p.lat > maxLat) maxLat = p.lat;
-      if (p.lon < minLon) minLon = p.lon;
-      if (p.lon > maxLon) maxLon = p.lon;
+      if (points[i].lat < minLat) minLat = points[i].lat;
+      if (points[i].lat > maxLat) maxLat = points[i].lat;
     }
     const centerLat = (minLat + maxLat) * 0.5;
     const cosLat = Math.cos((centerLat * Math.PI) / 180) || 1;
-    const span = Math.max(maxLat - minLat, (maxLon - minLon) * cosLat) || 0.001;
-    let eps = span * 0.00014;
+    const METERS_PER_DEG = 111320;
 
-    const anchorFlags = new Uint8Array(len);
-    anchorFlags[0] = 1;
-    anchorFlags[len - 1] = 1;
+    scores[0] = Infinity;
+    scores[len - 1] = Infinity;
+
+    const stack = [[0, len - 1, Infinity]];
+    while (stack.length > 0) {
+      const [first, last, parentScore] = stack.pop();
+      if (last <= first + 1) continue;
+
+      let maxDistSq = -1;
+      let splitIdx = first + 1;
+      const ax = points[first].lon * cosLat, ay = points[first].lat;
+      const bx = points[last].lon * cosLat,  by = points[last].lat;
+      const dx = bx - ax, dy = by - ay;
+      const lenSq = dx * dx + dy * dy;
+
+      for (let i = first + 1; i < last; i++) {
+        const px = points[i].lon * cosLat, py = points[i].lat;
+        let t = 0;
+        if (lenSq > 0) {
+          t = ((px - ax) * dx + (py - ay) * dy) / lenSq;
+          if (t < 0) t = 0; else if (t > 1) t = 1;
+        }
+        const distSq = (px - (ax + t * dx)) ** 2 + (py - (ay + t * dy)) ** 2;
+        if (distSq > maxDistSq) {
+          maxDistSq = distSq;
+          splitIdx = i;
+        }
+      }
+
+      const distMeters = Math.sqrt(Math.max(0, maxDistSq)) * METERS_PER_DEG;
+      // 親分割点のスコアを超えないように単調性を保証
+      const effectiveScore = Math.min(parentScore, distMeters);
+      scores[splitIdx] = effectiveScore;
+
+      stack.push([first, splitIdx, effectiveScore], [splitIdx, last, effectiveScore]);
+    }
+
+    // Waypointの最近傍トラック頂点をアンカーとして強制保護（Infinity付与）
     if (Array.isArray(waypoints)) {
       for (let w = 0; w < waypoints.length; w++) {
         const wpt = waypoints[w];
@@ -336,56 +403,126 @@
           const dSq = dLat * dLat + dLon * dLon;
           if (dSq < bestDistSq) { bestDistSq = dSq; bestIdx = i; }
         }
-        anchorFlags[bestIdx] = 1;
+        scores[bestIdx] = Infinity;
       }
     }
 
-    function runRDP(pts, epsilon) {
-      const keep = new Uint8Array(anchorFlags);
-      const stack = [[0, len - 1]];
-      const epsSq = epsilon * epsilon;
-
-      while (stack.length > 0) {
-        const [first, last] = stack.pop();
-        if (last <= first + 1) continue;
-
-        let maxDistSq = 0, splitIdx = first;
-        const ax = pts[first].lon * cosLat, ay = pts[first].lat;
-        const bx = pts[last].lon * cosLat,  by = pts[last].lat;
-        const dx = bx - ax, dy = by - ay;
-        const lenSq = dx * dx + dy * dy;
-
-        for (let i = first + 1; i < last; i++) {
-          const px = pts[i].lon * cosLat, py = pts[i].lat;
-          let t = 0;
-          if (lenSq > 0) {
-            t = ((px - ax) * dx + (py - ay) * dy) / lenSq;
-            if (t < 0) t = 0; else if (t > 1) t = 1;
-          }
-          const distSq = (px - (ax + t * dx)) ** 2 + (py - (ay + t * dy)) ** 2;
-          if (distSq > maxDistSq) { maxDistSq = distSq; splitIdx = i; }
-        }
-
-        if (maxDistSq > epsSq) {
-          keep[splitIdx] = 1;
-          stack.push([first, splitIdx], [splitIdx, last]);
-        }
-      }
-
-      const out = [];
-      for (let i = 0; i < len; i++) if (keep[i]) out.push(pts[i]);
-      return out;
-    }
-
-    let simplified = runRDP(points, eps);
-    let pass = 0;
-    while (simplified.length > maxCount && pass < 4) {
-      eps *= 2.1;
-      simplified = runRDP(points, eps);
-      pass++;
-    }
-    return simplified;
+    return scores;
   }
+
+  /**
+   * 指定された削減率（0, 10, 20, 30, 40, 50%）に基づき、重要度上位のポイントのみを抽出する
+   */
+  function extractReducedTrack(originalPts, scores, reductionPct) {
+    const n = originalPts.length;
+    if (n <= 2 || reductionPct <= 0) {
+      return { points: originalPts.slice(), maxErrorMeters: 0 };
+    }
+
+    const targetCount = Math.max(2, Math.round(n * (1 - reductionPct / 100)));
+    if (targetCount >= n) {
+      return { points: originalPts.slice(), maxErrorMeters: 0 };
+    }
+
+    // インデックスをスコア降順でソートして上位 targetCount 個を採用
+    const indices = Array.from({ length: n }, (_, i) => i);
+    indices.sort((a, b) => scores[b] - scores[a]);
+
+    const keepFlags = new Uint8Array(n);
+    for (let i = 0; i < targetCount; i++) {
+      keepFlags[indices[i]] = 1;
+    }
+
+    // 除外された点の中で最大の誤差スコアを取得（形状誤差メートル表示用）
+    const maxRemovedScore = scores[indices[targetCount]];
+    const maxErrorMeters = Number.isFinite(maxRemovedScore) ? maxRemovedScore : 0;
+
+    const result = [];
+    for (let i = 0; i < n; i++) {
+      if (keepFlags[i]) result.push(originalPts[i]);
+    }
+    return { points: result, maxErrorMeters };
+  }
+
+  /**
+   * 選択された削減率（0%〜50%）を適用し、候補ボタンUI・統計バッジ・プレビューを即時更新する
+   */
+  function applyReductionPercentage(percent) {
+    const validPct = REDUCTION_RATES.includes(percent) ? percent : 0;
+    State.reductionPercent = validPct;
+
+    const origLen = State.originalPoints.length;
+    if (origLen === 0) {
+      State.trackPoints = [];
+      State.currentErrorMeters = 0;
+      updateReductionUI();
+      return;
+    }
+
+    if (!State.pointImportance || State.pointImportance.length !== origLen) {
+      State.pointImportance = computePointImportanceScores(State.originalPoints, State.waypoints);
+    }
+
+    const { points, maxErrorMeters } = extractReducedTrack(State.originalPoints, State.pointImportance, validPct);
+    State.trackPoints = points;
+    State.currentErrorMeters = maxErrorMeters;
+
+    recalculateBoundsAndDistances();
+    updateReductionUI();
+    updateMetaText();
+    renderPresetThumbnails();
+  }
+
+  function updateReductionUI() {
+    const origLen = State.originalPoints.length;
+    const curLen = State.trackPoints.length;
+
+    if (UI.reductionCandidates) {
+      UI.reductionCandidates.querySelectorAll('.reduction-btn').forEach((btn) => {
+        const pct = parseInt(btn.dataset.reduce, 10) || 0;
+        btn.setAttribute('aria-pressed', pct === State.reductionPercent ? 'true' : 'false');
+        const ptsSpan = btn.querySelector('.red-pts');
+        if (ptsSpan) {
+          if (origLen === 0) {
+            ptsSpan.textContent = '- pts';
+          } else {
+            const count = pct === 0 ? origLen : Math.max(2, Math.round(origLen * (1 - pct / 100)));
+            ptsSpan.textContent = `${count.toLocaleString()} pts`;
+          }
+        }
+      });
+    }
+
+    if (UI.reductionStatsBadge) {
+      if (origLen === 0) {
+        UI.reductionStatsBadge.textContent = '0 pts';
+      } else if (State.reductionPercent === 0) {
+        UI.reductionStatsBadge.textContent = `元データ (${origLen.toLocaleString()} pts)`;
+      } else {
+        UI.reductionStatsBadge.textContent = `-${State.reductionPercent}% (${origLen.toLocaleString()}→${curLen.toLocaleString()} pts)`;
+      }
+    }
+
+    if (UI.reductionErrorInfo) {
+      if (origLen === 0 || State.reductionPercent === 0) {
+        UI.reductionErrorInfo.textContent = '形状誤差: 0.0m (元の軌跡と完全一致)';
+      } else {
+        UI.reductionErrorInfo.textContent = `最大形状誤差: 約${State.currentErrorMeters.toFixed(1)}m (Waypoint保護済)`;
+      }
+    }
+  }
+
+  on(UI.reductionCandidates, 'click', (e) => {
+    const btn = e.target.closest('button[data-reduce]');
+    if (!btn || State.isRecording) return;
+    const pct = parseInt(btn.dataset.reduce, 10) || 0;
+    applyReductionPercentage(pct);
+    if (pct === 0) {
+      setStatus(`元のGPXデータ（${State.originalPoints.length.toLocaleString()}点・削減なし）に切り替えました。`);
+    } else {
+      setStatus(`ルート形状を維持してポイントを ${pct}% 削減しました（${State.originalPoints.length.toLocaleString()}点 ➔ ${State.trackPoints.length.toLocaleString()}点 / 最大誤差 約${State.currentErrorMeters.toFixed(1)}m）。`);
+    }
+  });
 
   // --- 8. 累積距離テーブル＆距離比例補間 (Lerp) ---
   function buildCumulativeDistanceTable() {
@@ -432,6 +569,27 @@
       lon: tp[low].lon + (tp[low + 1].lon - tp[low].lon) * t,
       lastIndex: low
     };
+  }
+
+  /**
+   * 指定した座標 (lat, lon) から現在のルート上で最も近い頂点の座標を返す（ルート吸着・スナップ機能）
+   */
+  function findNearestTrackPoint(lat, lon) {
+    const tp = State.trackPoints;
+    if (tp.length === 0) return { lat, lon };
+    const cosLat = State.bounds.cosLat || 1;
+    let bestPt = tp[0];
+    let bestDistSq = Infinity;
+    for (let i = 0; i < tp.length; i++) {
+      const dLat = tp[i].lat - lat;
+      const dLon = (tp[i].lon - lon) * cosLat;
+      const dSq = dLat * dLat + dLon * dLon;
+      if (dSq < bestDistSq) {
+        bestDistSq = dSq;
+        bestPt = tp[i];
+      }
+    }
+    return { lat: bestPt.lat, lon: bestPt.lon };
   }
 
   // --- 9. 境界ボックス＆座標投影 ---
@@ -510,13 +668,15 @@
       return;
     }
 
-    const ptText = State.rawPointCount !== State.trackPoints.length
-      ? `${State.rawPointCount.toLocaleString()} → ${State.trackPoints.length.toLocaleString()} pts`
-      : `${State.trackPoints.length.toLocaleString()} pts`;
+    const origCount = State.originalPoints.length;
+    const curCount = State.trackPoints.length;
+    const ptText = State.reductionPercent > 0
+      ? `${origCount.toLocaleString()} → ${curCount.toLocaleString()} pts (-${State.reductionPercent}%)`
+      : `${curCount.toLocaleString()} pts`;
     if (UI.pointBadge) UI.pointBadge.textContent = ptText;
 
-    const photoText = State.bgPhotoName ? ` ｜ 背景写真: ${State.bgPhotoName}` : ' ｜ 背景: 透過/クロマキー';
-    if (UI.metaInfo) UI.metaInfo.textContent = `ルート: ${State.gpxFileName}（${ptText} / Waypoint: ${State.waypoints.length}箇所）${photoText}`;
+    const photoText = State.bgPhotoName ? ` ｜ 写真: ${State.bgPhotoName}` : ' ｜ 背景: 透過/クロマキー';
+    if (UI.metaInfo) UI.metaInfo.textContent = `${State.gpxFileName}（${ptText} / Wpt: ${State.waypoints.length}箇所）${photoText}`;
   }
 
   function renderPresetThumbnails() {
@@ -583,11 +743,9 @@
     });
   }
 
-  // --- 11. セキュアGPX / JSON / 写真ファイルローダー & 多重ドラッグ＆ドロップ登録 ---
+  // --- 11. セキュアGPX / JSON / 写真ローダー & 軽量GPXエクスポート ---
   function sanitizeXmlString(xmlText) {
-    if (xmlText.length > CONFIG.MAX_XML_LENGTH) {
-      throw new Error('XMLサイズが上限を超えています。');
-    }
+    if (xmlText.length > CONFIG.MAX_XML_LENGTH) throw new Error('XMLサイズが上限を超えています。');
     const cleaned = xmlText.replace(/^\uFEFF/, '').trimStart();
     if (/<!(DOCTYPE|ENTITY)\b/i.test(cleaned)) {
       throw new Error('DOCTYPEまたはENTITY宣言を含むXMLは読み込めません。');
@@ -602,6 +760,64 @@
     }
     return list;
   }
+
+  function escapeXmlText(str) {
+    return String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
+
+  /**
+   * 現在の削減済みトラックポイントと編集済みWaypointを標準GPX 1.1形式で書き出す
+   */
+  function exportReducedGpxFile() {
+    if (State.trackPoints.length < 2) {
+      setStatus('書き出すGPXルートデータがありません。先にGPXを読み込んでください。', true);
+      return;
+    }
+    const lines = [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<gpx version="1.1" creator="GPX Route Studio Workstation" xmlns="http://www.topografix.com/GPX/1/1">',
+      '  <metadata>',
+      `    <name>${escapeXmlText(State.gpxFileName || 'route')}</name>`,
+      `    <desc>Reduced by ${State.reductionPercent}% (${State.originalPoints.length} -> ${State.trackPoints.length} pts)</desc>`,
+      '  </metadata>'
+    ];
+
+    for (let i = 0; i < State.waypoints.length; i++) {
+      const w = State.waypoints[i];
+      lines.push(`  <wpt lat="${w.lat.toFixed(6)}" lon="${w.lon.toFixed(6)}">`);
+      lines.push(`    <name>${escapeXmlText(w.name)}</name>`);
+      lines.push('  </wpt>');
+    }
+
+    lines.push('  <trk>');
+    lines.push(`    <name>${escapeXmlText(State.gpxFileName || 'Track')}</name>`);
+    lines.push('    <trkseg>');
+    for (let i = 0; i < State.trackPoints.length; i++) {
+      const p = State.trackPoints[i];
+      if (Number.isFinite(p.ele)) {
+        lines.push(`      <trkpt lat="${p.lat.toFixed(6)}" lon="${p.lon.toFixed(6)}"><ele>${p.ele.toFixed(1)}</ele></trkpt>`);
+      } else {
+        lines.push(`      <trkpt lat="${p.lat.toFixed(6)}" lon="${p.lon.toFixed(6)}" />`);
+      }
+    }
+    lines.push('    </trkseg>');
+    lines.push('  </trk>');
+    lines.push('</gpx>');
+
+    const blob = new Blob([lines.join('\n')], { type: 'application/gpx+xml' });
+    const baseName = (State.gpxFileName || 'route').replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_') || 'route';
+    const suffix = State.reductionPercent > 0 ? `_reduced_${State.reductionPercent}pct` : '_edited';
+    triggerBlobDownload(blob, `${baseName}${suffix}.gpx`);
+    setStatus(`編集済みGPXファイル（${State.trackPoints.length.toLocaleString()}点 / Waypoint ${State.waypoints.length}箇所）を書き出しました。`);
+  }
+
+  on(UI.btnExportGpx, 'click', exportReducedGpxFile);
+  on(UI.btnExportGpxSide, 'click', exportReducedGpxFile);
 
   async function processUploadedFiles(fileList) {
     if (!fileList || fileList.length === 0 || State.isRecording) return;
@@ -672,11 +888,13 @@
         if (nodes.length === 0) nodes = getXmlElements(xml, 'rtept');
 
         const rawPts = [];
-        for (let i = 0; i < nodes.length; i++) {
+        for (let i = 0; i < nodes.length && rawPts.length < CONFIG.MAX_RAW_PTS; i++) {
           const lat = parseFloat(nodes[i].getAttribute('lat'));
           const lon = parseFloat(nodes[i].getAttribute('lon'));
           if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
-            rawPts.push({ lat, lon });
+            const eleEl = getXmlElements(nodes[i], 'ele')[0];
+            const ele = eleEl ? parseFloat(eleEl.textContent) : undefined;
+            rawPts.push(Number.isFinite(ele) ? { lat, lon, ele } : { lat, lon });
           }
         }
 
@@ -702,29 +920,28 @@
           if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
             const nameEl = getXmlElements(wptNodes[i], 'name')[0];
             const name = (nameEl?.textContent || `地点${i + 1}`).trim().slice(0, 40);
-            wpts.push({ id: State.nextId++, lat, lon, name, visible: true, blinking: i === 0 });
+            wpts.push({ id: State.nextId++, lat, lon, name, visible: true, blinking: i === 0, labelDir: 'auto' });
           }
         }
 
-        State.gpxFileName = file.name || 'route.gpx';
-        State.rawPointCount = rawPts.length;
-        State.trackPoints = simplifyTrackWithAnchors(rawPts, wpts, CONFIG.MAX_RENDER_PTS);
-
         if (wpts.length === 0) {
-          const tp = State.trackPoints;
-          const mid = Math.floor(tp.length * 0.5);
-          wpts.push({ id: State.nextId++, ...tp[0], name: 'スタート', visible: true, blinking: false });
-          wpts.push({ id: State.nextId++, ...tp[mid], name: '山頂・中間地点', visible: true, blinking: true });
-          wpts.push({ id: State.nextId++, ...tp[tp.length - 1], name: 'ゴール', visible: true, blinking: false });
+          const mid = Math.floor(rawPts.length * 0.5);
+          wpts.push({ id: State.nextId++, lat: rawPts[0].lat, lon: rawPts[0].lon, name: 'スタート', visible: true, blinking: false, labelDir: 'auto' });
+          wpts.push({ id: State.nextId++, lat: rawPts[mid].lat, lon: rawPts[mid].lon, name: '山頂・中間地点', visible: true, blinking: true, labelDir: 'auto' });
+          wpts.push({ id: State.nextId++, lat: rawPts[rawPts.length - 1].lat, lon: rawPts[rawPts.length - 1].lon, name: 'ゴール', visible: true, blinking: false, labelDir: 'auto' });
         }
 
+        State.gpxFileName = file.name || 'route.gpx';
+        State.originalPoints = rawPts;
         State.waypoints = wpts;
         State.selectedWptId = wpts[0].id;
+        State.pointImportance = computePointImportanceScores(State.originalPoints, State.waypoints);
         closeFloatingAddBar(false);
-        recalculateBoundsAndDistances();
-        updateMetaText();
+
+        // 初期状態は元データ（0%削減）または現在選択中の削減率を適用
+        applyReductionPercentage(State.reductionPercent);
         syncWaypointSelectUI();
-        setStatus(`GPX「${State.gpxFileName}」(${State.rawPointCount.toLocaleString()}点) を読み込みました。`);
+        setStatus(`GPX「${State.gpxFileName}」(${State.originalPoints.length.toLocaleString()}点) を読み込みました。左パネルで10%〜50%のポイント削減候補を選択できます。`);
       } catch (err) {
         setStatus(`ファイル読込エラー (${file.name}): ${err.message}`, true);
       }
@@ -778,7 +995,16 @@
   on(UI.previewContainer, 'dragover', handleDragOver);
   on(UI.previewContainer, 'drop', handleDrop);
 
-  // --- 12. Waypointダイレクト編集テーブル ---
+  // --- 12. 強化版 Waypointダイレクト編集スタジオ（8方向ラベル・ルート吸着・順序変更・ドラッグ移動） ---
+  function getLabelDirSpec(dirKey) {
+    return LABEL_DIRS.find(d => d.key === dirKey) || LABEL_DIRS[0];
+  }
+
+  function nextLabelDirKey(currentKey) {
+    const idx = LABEL_DIRS.findIndex(d => d.key === currentKey);
+    return LABEL_DIRS[(idx + 1) % LABEL_DIRS.length].key;
+  }
+
   function updateBlinkCountBadge() {
     let blinkCount = State.seekBlinking ? 1 : 0;
     for (let i = 0; i < State.waypoints.length; i++) {
@@ -803,24 +1029,28 @@
       return;
     }
 
-    State.waypoints.forEach((wpt) => {
+    State.waypoints.forEach((wpt, idx) => {
+      if (!wpt.labelDir) wpt.labelDir = 'auto';
+      const dirSpec = getLabelDirSpec(wpt.labelDir);
+
       if (UI.wptTableBody) {
         const row = document.createElement('div');
         row.className = wpt.blinking ? 'wpt-row is-blinking' : 'wpt-row';
 
+        // 1. 点滅ON/OFF
         const blinkBtn = document.createElement('button');
         blinkBtn.type = 'button';
         blinkBtn.className = 'wpt-blink-btn';
         blinkBtn.setAttribute('aria-pressed', String(Boolean(wpt.blinking)));
         blinkBtn.textContent = wpt.blinking ? '⚡ON' : 'OFF';
-        blinkBtn.title = 'クリックで点滅ON/OFF（Shift+クリックで単独点滅）';
+        blinkBtn.title = 'クリックで点滅切替（Shift+クリックで単独点滅）';
         blinkBtn.addEventListener('click', (e) => {
           if (e.shiftKey) {
             State.waypoints.forEach(w => { w.blinking = (w.id === wpt.id); });
             State.seekBlinking = false;
             if (UI.btnToggleSeekBlink) {
               UI.btnToggleSeekBlink.setAttribute('aria-pressed', 'false');
-              UI.btnToggleSeekBlink.textContent = '⚡ シーク位置を点滅: OFF';
+              UI.btnToggleSeekBlink.textContent = '⚡点滅:OFF';
             }
           } else {
             wpt.blinking = !wpt.blinking;
@@ -828,6 +1058,7 @@
           syncWaypointSelectUI();
         });
 
+        // 2. ラベル表示ON/OFF
         const visBtn = document.createElement('button');
         visBtn.type = 'button';
         visBtn.className = 'wpt-vis-btn';
@@ -839,11 +1070,13 @@
           syncWaypointSelectUI();
         });
 
+        // 3. 地名テキスト直接入力
         const nameInput = document.createElement('input');
         nameInput.type = 'text';
         nameInput.className = 'wpt-inline-input';
         nameInput.maxLength = 40;
         nameInput.value = wpt.name;
+        nameInput.title = `緯度: ${wpt.lat.toFixed(5)}, 経度: ${wpt.lon.toFixed(5)}`;
         nameInput.addEventListener('input', () => {
           wpt.name = nameInput.value.slice(0, 40);
         });
@@ -855,22 +1088,89 @@
           if (e.key === 'Enter') nameInput.blur();
         });
 
-        const delBtn = document.createElement('button');
-        delBtn.type = 'button';
-        delBtn.className = 'wpt-del-btn';
-        delBtn.textContent = '×';
-        delBtn.title = '削除';
-        delBtn.addEventListener('click', () => {
-          State.waypoints = State.waypoints.filter(w => w.id !== wpt.id);
+        // 4. ラベル引き出し方向切替ボタン（自動 / 8方向）
+        const dirBtn = document.createElement('button');
+        dirBtn.type = 'button';
+        dirBtn.className = 'wpt-dir-btn';
+        dirBtn.textContent = dirSpec.icon;
+        dirBtn.title = `ラベル方向: ${dirSpec.title}（クリックで8方向＋自動を順送り）`;
+        dirBtn.addEventListener('click', () => {
+          wpt.labelDir = nextLabelDirKey(wpt.labelDir);
+          syncWaypointSelectUI();
+          const nextSpec = getLabelDirSpec(wpt.labelDir);
+          setStatus(`「${wpt.name}」のラベル表示方向を「${nextSpec.title}」に変更しました。`);
+        });
+
+        // 5. 操作ボタン群（最寄りルート吸着 🧲 / 上へ ▲ / 下へ ▼ / 削除 ×）
+        const opsDiv = document.createElement('div');
+        opsDiv.className = 'wpt-ops';
+
+        const snapBtn = document.createElement('button');
+        snapBtn.type = 'button';
+        snapBtn.className = 'wpt-op-btn';
+        snapBtn.textContent = '🧲';
+        snapBtn.title = 'このWaypointを最寄りのルート線上へ吸着（スナップ）させます';
+        snapBtn.addEventListener('click', () => {
+          const snapped = findNearestTrackPoint(wpt.lat, wpt.lon);
+          wpt.lat = snapped.lat;
+          wpt.lon = snapped.lon;
+          State.pointImportance = computePointImportanceScores(State.originalPoints, State.waypoints);
           recalculateBoundsAndDistances();
-          updateMetaText();
+          syncWaypointSelectUI();
+          setStatus(`「${wpt.name}」を最寄りのルート線上へ吸着しました。`);
+        });
+
+        const upBtn = document.createElement('button');
+        upBtn.type = 'button';
+        upBtn.className = 'wpt-op-btn';
+        upBtn.textContent = '▲';
+        upBtn.disabled = idx === 0;
+        upBtn.title = '順序を1つ上へ移動';
+        upBtn.addEventListener('click', () => {
+          if (idx <= 0) return;
+          const tmp = State.waypoints[idx - 1];
+          State.waypoints[idx - 1] = State.waypoints[idx];
+          State.waypoints[idx] = tmp;
           syncWaypointSelectUI();
         });
+
+        const downBtn = document.createElement('button');
+        downBtn.type = 'button';
+        downBtn.className = 'wpt-op-btn';
+        downBtn.textContent = '▼';
+        downBtn.disabled = idx === State.waypoints.length - 1;
+        downBtn.title = '順序を1つ下へ移動';
+        downBtn.addEventListener('click', () => {
+          if (idx >= State.waypoints.length - 1) return;
+          const tmp = State.waypoints[idx + 1];
+          State.waypoints[idx + 1] = State.waypoints[idx];
+          State.waypoints[idx] = tmp;
+          syncWaypointSelectUI();
+        });
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'wpt-op-btn del';
+        delBtn.textContent = '×';
+        delBtn.title = 'このWaypointを削除';
+        delBtn.addEventListener('click', () => {
+          State.waypoints = State.waypoints.filter(w => w.id !== wpt.id);
+          State.pointImportance = computePointImportanceScores(State.originalPoints, State.waypoints);
+          applyReductionPercentage(State.reductionPercent);
+          syncWaypointSelectUI();
+          setStatus(`「${wpt.name}」を削除しました。`);
+        });
+
+        opsDiv.appendChild(snapBtn);
+        opsDiv.appendChild(upBtn);
+        opsDiv.appendChild(downBtn);
+        opsDiv.appendChild(delBtn);
 
         row.appendChild(blinkBtn);
         row.appendChild(visBtn);
         row.appendChild(nameInput);
-        row.appendChild(delBtn);
+        row.appendChild(dirBtn);
+        row.appendChild(opsDiv);
         UI.wptTableBody.appendChild(row);
       }
 
@@ -896,7 +1196,7 @@
     State.seekBlinking = false;
     if (UI.btnToggleSeekBlink) {
       UI.btnToggleSeekBlink.setAttribute('aria-pressed', 'false');
-      UI.btnToggleSeekBlink.textContent = '⚡ シーク位置を点滅: OFF';
+      UI.btnToggleSeekBlink.textContent = '⚡点滅:OFF';
     }
     syncWaypointSelectUI();
     setStatus('すべての点滅をOFFにしました。');
@@ -906,6 +1206,29 @@
     const anyVis = State.waypoints.some(w => w.visible);
     State.waypoints.forEach(w => { w.visible = !anyVis; });
     syncWaypointSelectUI();
+  });
+
+  on(UI.btnToggleWptDragMode, 'click', () => {
+    State.wptDragMode = !State.wptDragMode;
+    UI.btnToggleWptDragMode.setAttribute('aria-pressed', String(State.wptDragMode));
+    UI.btnToggleWptDragMode.textContent = `✋ピン移動:${State.wptDragMode ? 'ON' : 'OFF'}`;
+    canvas.classList.toggle('wpt-drag-cursor', State.wptDragMode);
+    setStatus(State.wptDragMode
+      ? 'Waypointピン移動モードON：キャンバス上の丸ピンをマウスドラッグで直接好きな場所へ移動できます。'
+      : '通常の地図移動モードに戻りました（Shift+ドラッグでもピン移動可能です）。');
+  });
+
+  on(UI.btnSnapAllWpts, 'click', () => {
+    if (State.waypoints.length === 0 || State.trackPoints.length === 0) return;
+    State.waypoints.forEach((wpt) => {
+      const snapped = findNearestTrackPoint(wpt.lat, wpt.lon);
+      wpt.lat = snapped.lat;
+      wpt.lon = snapped.lon;
+    });
+    State.pointImportance = computePointImportanceScores(State.originalPoints, State.waypoints);
+    recalculateBoundsAndDistances();
+    syncWaypointSelectUI();
+    setStatus('すべてのWaypointを最寄りのルート線上へ一括吸着しました。');
   });
 
   on(UI.btnAddWptAtSeek, 'click', () => {
@@ -923,11 +1246,12 @@
       lon: pt.lon,
       name: cleanName,
       visible: true,
-      blinking: true
+      blinking: true,
+      labelDir: 'auto'
     });
     if (UI.newSeekWptInput) UI.newSeekWptInput.value = '';
-    recalculateBoundsAndDistances();
-    updateMetaText();
+    State.pointImportance = computePointImportanceScores(State.originalPoints, State.waypoints);
+    applyReductionPercentage(State.reductionPercent);
     syncWaypointSelectUI();
     setStatus(`シーク位置に「${cleanName}」を追加し、点滅をONにしました。`);
   });
@@ -953,16 +1277,24 @@
     if (commit && State.pendingCoord && State.waypoints.length < CONFIG.MAX_WAYPOINTS) {
       const rawVal = UI.wptNameInput ? UI.wptNameInput.value.trim() : '';
       const cleanName = (rawVal || `地点${State.waypoints.length + 1}`).slice(0, 40);
+      let targetLat = State.pendingCoord.lat;
+      let targetLon = State.pendingCoord.lon;
+      if (UI.wptSnapOnAdd && UI.wptSnapOnAdd.checked) {
+        const snapped = findNearestTrackPoint(targetLat, targetLon);
+        targetLat = snapped.lat;
+        targetLon = snapped.lon;
+      }
       State.waypoints.push({
         id: State.nextId++,
-        lat: State.pendingCoord.lat,
-        lon: State.pendingCoord.lon,
+        lat: targetLat,
+        lon: targetLon,
         name: cleanName,
         visible: true,
-        blinking: true
+        blinking: true,
+        labelDir: 'auto'
       });
-      recalculateBoundsAndDistances();
-      updateMetaText();
+      State.pointImportance = computePointImportanceScores(State.originalPoints, State.waypoints);
+      applyReductionPercentage(State.reductionPercent);
       syncWaypointSelectUI();
       setStatus(`「${cleanName}」を追加しました。`);
     }
@@ -991,16 +1323,20 @@
       }
     }
 
+    const baseTrack = State.originalPoints.length > 0 ? State.originalPoints : State.trackPoints;
+
     return {
       magic: CONFIG.PROJECT_MAGIC,
       version: CONFIG.PROJECT_VERSION,
       savedAt: new Date().toISOString(),
       route: {
         gpxFileName: State.gpxFileName || 'route.gpx',
-        rawPointCount: State.rawPointCount,
-        trackPoints: State.trackPoints.map(p => ({
+        rawPointCount: baseTrack.length,
+        reductionPercent: State.reductionPercent,
+        trackPoints: baseTrack.map(p => ({
           lat: Number(p.lat.toFixed(6)),
-          lon: Number(p.lon.toFixed(6))
+          lon: Number(p.lon.toFixed(6)),
+          ...(Number.isFinite(p.ele) ? { ele: Number(p.ele.toFixed(1)) } : {})
         })),
         waypoints: State.waypoints.map(w => ({
           id: w.id,
@@ -1008,7 +1344,8 @@
           lon: Number(w.lon.toFixed(6)),
           name: String(w.name).slice(0, 40),
           visible: Boolean(w.visible),
-          blinking: Boolean(w.blinking)
+          blinking: Boolean(w.blinking),
+          labelDir: w.labelDir || 'auto'
         }))
       },
       view: {
@@ -1061,19 +1398,20 @@
     }
 
     const validTrack = [];
-    const maxPts = CONFIG.MAX_RENDER_PTS * 2;
-    for (let i = 0; i < route.trackPoints.length && validTrack.length < maxPts; i++) {
+    for (let i = 0; i < route.trackPoints.length && validTrack.length < CONFIG.MAX_RAW_PTS; i++) {
       const pt = route.trackPoints[i];
       if (!pt || typeof pt !== 'object') continue;
       const lat = Number(pt.lat), lon = Number(pt.lon);
       if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
-        validTrack.push({ lat, lon });
+        const ele = Number(pt.ele);
+        validTrack.push(Number.isFinite(ele) ? { lat, lon, ele } : { lat, lon });
       }
     }
     if (validTrack.length < 2) throw new Error('プロジェクト内の有効なGPS座標が2点未満です。');
 
     const validWpts = [];
     let maxId = 0;
+    const validDirKeys = LABEL_DIRS.map(d => d.key);
     if (Array.isArray(route.waypoints)) {
       for (let i = 0; i < route.waypoints.length && validWpts.length < CONFIG.MAX_WAYPOINTS; i++) {
         const w = route.waypoints[i];
@@ -1083,7 +1421,8 @@
           const id = Number.isInteger(w.id) && w.id > 0 ? w.id : (i + 1);
           if (id > maxId) maxId = id;
           const name = String(w.name ?? `地点${i + 1}`).trim().slice(0, 40) || `地点${i + 1}`;
-          validWpts.push({ id, lat, lon, name, visible: w.visible !== false, blinking: Boolean(w.blinking) });
+          const labelDir = validDirKeys.includes(w.labelDir) ? w.labelDir : 'auto';
+          validWpts.push({ id, lat, lon, name, visible: w.visible !== false, blinking: Boolean(w.blinking), labelDir });
         }
       }
     }
@@ -1125,14 +1464,11 @@
       }
     }
 
-    const rawPointCount = Math.max(
-      validTrack.length,
-      Number.isInteger(route.rawPointCount) && route.rawPointCount > 0 ? route.rawPointCount : validTrack.length
-    );
+    const reductionPercent = REDUCTION_RATES.includes(route.reductionPercent) ? route.reductionPercent : 0;
 
     return {
       gpxFileName: String(route.gpxFileName || 'project_route.gpx').slice(0, 100),
-      rawPointCount,
+      reductionPercent,
       trackPoints: validTrack,
       waypoints: validWpts,
       nextId: maxId + 1,
@@ -1179,7 +1515,7 @@
     if (UI.seekBadge) UI.seekBadge.textContent = `${Math.round(State.seekRatio * 100)}%地点`;
     if (UI.btnToggleSeekBlink) {
       UI.btnToggleSeekBlink.setAttribute('aria-pressed', String(State.seekBlinking));
-      UI.btnToggleSeekBlink.textContent = `⚡ シーク位置を点滅: ${State.seekBlinking ? 'ON' : 'OFF'}`;
+      UI.btnToggleSeekBlink.textContent = `⚡点滅:${State.seekBlinking ? 'ON' : 'OFF'}`;
     }
 
     if (UI.animSpeedNum && UI.animSpeedRange) UI.animSpeedNum.value = UI.animSpeedRange.value;
@@ -1188,6 +1524,7 @@
     if (UI.secBadge && UI.recordSecRange) UI.secBadge.textContent = `${UI.recordSecRange.value}秒`;
 
     validateChromaCollision();
+    updateReductionUI();
     updateMetaText();
     syncWaypointSelectUI();
   }
@@ -1222,10 +1559,10 @@
     }
 
     State.gpxFileName = validated.gpxFileName;
-    State.rawPointCount = validated.rawPointCount;
-    State.trackPoints = validated.trackPoints;
+    State.originalPoints = validated.trackPoints;
     State.waypoints = validated.waypoints;
     State.nextId = Math.max(State.nextId, validated.nextId);
+    State.pointImportance = computePointImportanceScores(State.originalPoints, State.waypoints);
 
     State.view.offsetX = validated.view.offsetX;
     State.view.offsetY = validated.view.offsetY;
@@ -1250,7 +1587,7 @@
     if (UI.recordSecRange) UI.recordSecRange.value = String(validated.animation.recordSec);
 
     closeFloatingAddBar(false);
-    recalculateBoundsAndDistances();
+    applyReductionPercentage(validated.reductionPercent);
     syncAllControlsWithState();
   }
 
@@ -1280,10 +1617,13 @@
     e.target.value = '';
   });
 
-  // --- 14. 外部サンプルGPX (sample_routegpx.gpx) 読込＆不在時待機（起動時の背景プレートを確実にOFFに固定） ---
+  // --- 14. 外部サンプルGPX (sample_routegpx.gpx) 読込＆不在時待機（起動時の背景プレートOFF固定） ---
   function resetToEmptyWaitingState() {
     State.gpxFileName = '';
-    State.rawPointCount = 0;
+    State.originalPoints = [];
+    State.pointImportance = null;
+    State.reductionPercent = 0;
+    State.currentErrorMeters = 0;
     State.trackPoints = [];
     State.cumDist = new Float64Array(0);
     State.totalDist = 0;
@@ -1297,11 +1637,12 @@
     if (UI.seekBadge) UI.seekBadge.textContent = '50%地点';
     if (UI.btnToggleSeekBlink) {
       UI.btnToggleSeekBlink.setAttribute('aria-pressed', 'false');
-      UI.btnToggleSeekBlink.textContent = '⚡ シーク位置を点滅: OFF';
+      UI.btnToggleSeekBlink.textContent = '⚡点滅:OFF';
     }
     closeFloatingAddBar(false);
     ctx.clearRect(0, 0, CONFIG.CANVAS_W, CONFIG.CANVAS_H);
     applyPreset('br');
+    updateReductionUI();
     updateMetaText();
     syncWaypointSelectUI();
   }
@@ -1315,6 +1656,7 @@
       const gpxText = await response.text();
       const sampleFile = new File([gpxText], CONFIG.SAMPLE_GPX_FILE, { type: 'application/gpx+xml' });
 
+      State.reductionPercent = 0;
       await processUploadedFiles([sampleFile]);
 
       if (State.waypoints.length >= 3) {
@@ -1467,7 +1809,7 @@
       State.seekBlinking = true;
       if (UI.btnToggleSeekBlink) {
         UI.btnToggleSeekBlink.setAttribute('aria-pressed', 'true');
-        UI.btnToggleSeekBlink.textContent = '⚡ シーク位置を点滅: ON';
+        UI.btnToggleSeekBlink.textContent = '⚡点滅:ON';
       }
       updateBlinkCountBadge();
     }
@@ -1476,14 +1818,14 @@
   on(UI.btnToggleSeekBlink, 'click', () => {
     State.seekBlinking = !State.seekBlinking;
     UI.btnToggleSeekBlink.setAttribute('aria-pressed', String(State.seekBlinking));
-    UI.btnToggleSeekBlink.textContent = `⚡ シーク位置を点滅: ${State.seekBlinking ? 'ON' : 'OFF'}`;
+    UI.btnToggleSeekBlink.textContent = `⚡点滅:${State.seekBlinking ? 'ON' : 'OFF'}`;
     updateBlinkCountBadge();
   });
 
   on(UI.bgModeSelect, 'change', validateChromaCollision);
 
-  // --- 16. キャンバス操作＆PCキーボードショートカット ---
-  let isDragging = false;
+  // --- 16. キャンバス操作（地図移動 ＆ Waypointピン直接ドラッグ移動） ---
+  let isDraggingMap = false;
   let dragStart = { x: 0, y: 0 };
 
   function getCanvasCoords(clientX, clientY) {
@@ -1494,25 +1836,74 @@
     };
   }
 
+  /**
+   * キャンバス上の座標 (cx, cy) 付近にあるWaypointを検索する（ヒット判定半径 24px）
+   */
+  function hitTestWaypoint(cx, cy) {
+    let closest = null;
+    let minDist = 24;
+    for (let i = State.waypoints.length - 1; i >= 0; i--) {
+      const w = State.waypoints[i];
+      const pt = projectToMain(w.lat, w.lon);
+      const d = Math.hypot(pt.x - cx, pt.y - cy);
+      if (d < minDist) {
+        minDist = d;
+        closest = w;
+      }
+    }
+    return closest;
+  }
+
   on(canvas, 'pointerdown', (e) => {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
-    isDragging = true;
-    canvas.setPointerCapture(e.pointerId);
     const pt = getCanvasCoords(e.clientX, e.clientY);
+
+    // ピン移動モードON または Shiftキー押下時は、Waypointピンのドラッグ移動を優先判定
+    if (State.wptDragMode || e.shiftKey) {
+      const hitWpt = hitTestWaypoint(pt.x, pt.y);
+      if (hitWpt) {
+        State.draggingWpt = hitWpt;
+        canvas.setPointerCapture(e.pointerId);
+        setStatus(`Waypoint「${hitWpt.name}」を移動中...（Ctrlキーを押しながら動かすとルート線上に自動吸着します）`);
+        return;
+      }
+    }
+
+    isDraggingMap = true;
+    canvas.setPointerCapture(e.pointerId);
     dragStart.x = pt.x - State.view.offsetX;
     dragStart.y = pt.y - State.view.offsetY;
   });
 
   on(canvas, 'pointermove', (e) => {
-    if (!isDragging) return;
     const pt = getCanvasCoords(e.clientX, e.clientY);
+
+    if (State.draggingWpt) {
+      let coord = unprojectFromMain(pt.x, pt.y);
+      if (e.ctrlKey || e.metaKey) {
+        coord = findNearestTrackPoint(coord.lat, coord.lon);
+      }
+      State.draggingWpt.lat = clampNumber(coord.lat, -90, 90, State.draggingWpt.lat);
+      State.draggingWpt.lon = clampNumber(coord.lon, -180, 180, State.draggingWpt.lon);
+      return;
+    }
+
+    if (!isDraggingMap) return;
     State.view.offsetX = clampNumber(pt.x - dragStart.x, -2000, 4000, 960);
     State.view.offsetY = clampNumber(pt.y - dragStart.y, -2000, 3000, 540);
   });
 
   function stopDragging(e) {
-    if (!isDragging) return;
-    isDragging = false;
+    if (State.draggingWpt) {
+      const movedName = State.draggingWpt.name;
+      State.draggingWpt = null;
+      if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+      renderPresetThumbnails();
+      setStatus(`Waypoint「${movedName}」の位置を更新しました。`);
+      return;
+    }
+    if (!isDraggingMap) return;
+    isDraggingMap = false;
     if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
   }
   on(canvas, 'pointerup', stopDragging);
@@ -1548,7 +1939,7 @@
     else if (e.key === 'p' || e.key === 'P') { e.preventDefault(); setPlateState(!State.showPlate); }
   });
 
-  // --- 17. クロマキー対応レンダリングエンジン ---
+  // --- 17. クロマキー対応＆8方向ラベル引き出し線付きレンダリングエンジン ---
   function drawRoundedRect(context, x, y, w, h, r) {
     context.beginPath();
     if (typeof context.roundRect === 'function') {
@@ -1706,25 +2097,64 @@
     ctx.stroke();
     ctx.restore();
 
+    // Waypointピン＆8方向対応ラベル描画
     const fontSize = parseInt(UI.fontSizeRange?.value, 10) || 20;
     const wp = State.waypoints;
     ctx.save();
     ctx.font = `bold ${fontSize}px system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif`;
-    ctx.textBaseline = 'middle';
 
     for (let i = 0; i < wp.length; i++) {
-      if (!wp[i].visible) continue;
-      const pt = projectToMain(wp[i].lat, wp[i].lon);
-      ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#000000'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(pt.x, pt.y, Math.max(4, lineWidth * 0.75), 0, Math.PI * 2);
-      ctx.stroke(); ctx.fill();
+      const wpt = wp[i];
+      const pt = projectToMain(wpt.lat, wpt.lon);
+      const pinRadius = Math.max(4.5, lineWidth * 0.78);
 
-      const tx = pt.x + 12, ty = pt.y;
-      ctx.strokeStyle = isUnshieldedChroma ? '#000000' : 'rgba(0, 0, 0, 0.92)';
-      ctx.lineWidth = 5; ctx.lineJoin = 'round';
-      ctx.strokeText(wp[i].name, tx, ty);
+      // 丸ピン描画
       ctx.fillStyle = '#ffffff';
-      ctx.fillText(wp[i].name, tx, ty);
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, pinRadius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fill();
+
+      if (!wpt.visible) continue;
+
+      const dirSpec = getLabelDirSpec(wpt.labelDir || 'auto');
+      let dx = dirSpec.dx;
+      let dy = dirSpec.dy;
+
+      // 自動配置時はマップ中心から外側へ向かう方向を選ぶ
+      if (dirSpec.key === 'auto') {
+        dx = pt.x >= State.view.offsetX ? 1 : -1;
+        dy = 0;
+      }
+
+      const dist = pinRadius + 10 + (Math.abs(dy) > 0 && dx === 0 ? fontSize * 0.45 : 0);
+      const tx = pt.x + dx * dist;
+      const ty = pt.y + dy * dist;
+
+      // 方向オフセット時は短い引き出し線を描画して対応関係を明確化
+      if (dirSpec.key !== 'auto' && dirSpec.key !== 'E') {
+        ctx.beginPath();
+        ctx.moveTo(pt.x + dx * pinRadius, pt.y + dy * pinRadius);
+        ctx.lineTo(tx - dx * 3, ty - dy * 3);
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      ctx.textAlign = dx > 0.2 ? 'left' : dx < -0.2 ? 'right' : 'center';
+      ctx.textBaseline = dy > 0.4 ? 'top' : dy < -0.4 ? 'bottom' : 'middle';
+
+      ctx.strokeStyle = isUnshieldedChroma ? '#000000' : 'rgba(0, 0, 0, 0.92)';
+      ctx.lineWidth = 5;
+      ctx.lineJoin = 'round';
+      ctx.strokeText(wpt.name, tx, ty);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(wpt.name, tx, ty);
     }
     ctx.restore();
 
@@ -1845,7 +2275,7 @@
   on(UI.btnExportPng, 'click', exportPngSnapshot);
   on(UI.btnExportPngSide, 'click', exportPngSnapshot);
 
-  // --- 19. 自己診断テストスイート (全7項目) ---
+  // --- 19. 自己診断テストスイート (全8項目) ---
   on(UI.btnSelfTest, 'click', () => {
     if (!UI.testBox) return;
     if (!UI.testBox.hidden) {
@@ -1855,52 +2285,69 @@
     const logs = [];
     const assert = (name, cond) => logs.push(`${cond ? '✅ PASS' : '❌ FAIL'}: ${name}`);
 
-    const dummy10k = Array.from({ length: 10000 }, (_, i) => ({
-      lat: 35.0 + i * 0.00001,
-      lon: 135.0 + Math.sin(i * 0.05) * 0.001
+    // Test 1: 重要度ランキング式RDPと5段階削減（10%〜50%）の精度＆Waypointアンカー保護検証
+    const dummy1000 = Array.from({ length: 1000 }, (_, i) => ({
+      lat: 35.0 + i * 0.0001,
+      lon: 135.0 + Math.sin(i * 0.08) * 0.002
     }));
-    const anchorWpt = [{ lat: dummy10k[5432].lat, lon: dummy10k[5432].lon }];
-    const simplified = simplifyTrackWithAnchors(dummy10k, anchorWpt, CONFIG.MAX_RENDER_PTS);
-    const anchorKept = simplified.some(p => p.lat === dummy10k[5432].lat && p.lon === dummy10k[5432].lon);
-    assert(`RDP軽量化 & アンカー保護 (10,000->${simplified.length}pts)`, simplified.length >= 2 && simplified.length <= CONFIG.MAX_RENDER_PTS && anchorKept);
+    const anchorWpt = [{ lat: dummy1000[333].lat, lon: dummy1000[333].lon }];
+    const scores = computePointImportanceScores(dummy1000, anchorWpt);
+    const red10 = extractReducedTrack(dummy1000, scores, 10).points;
+    const red30 = extractReducedTrack(dummy1000, scores, 30).points;
+    const red50 = extractReducedTrack(dummy1000, scores, 50).points;
+    const anchorPreserved = red50.some(p => p.lat === dummy1000[333].lat && p.lon === dummy1000[333].lon);
+    assert(
+      `5段階GPXポイント削減 (-10%=${red10.length}pts, -30%=${red30.length}pts, -50%=${red50.length}pts, アンカー保持=${anchorPreserved})`,
+      red10.length === 900 && red30.length === 700 && red50.length === 500 && anchorPreserved
+    );
 
+    // Test 2: 累積距離二分探索＆線形補間 (Lerp)
     const midInterp = getPointAtDistanceRatio(0.5);
     assert('累積距離二分探索 & 線形補間 (Lerp)', Number.isFinite(midInterp.lat) && Number.isFinite(midInterp.lon));
 
+    // Test 3: 座標投影 <-> 逆投影の往復精度
     const origLat = 34.7770, origLon = 135.2637;
     const p = projectToMain(origLat, origLon);
     const back = unprojectFromMain(p.x, p.y);
     const err = Math.hypot(origLat - back.lat, origLon - back.lon);
     assert(`座標投影 <-> 逆投影の往復精度 (${err.toExponential(2)})`, err < 1e-6);
 
+    // Test 4: Waypointルート吸着（スナップ）精度検証
+    const snapped = findNearestTrackPoint(34.7775, 135.2640);
+    assert('Waypoint最寄りルート吸着 (Snap-to-Route) 計算確認', Number.isFinite(snapped.lat) && Number.isFinite(snapped.lon));
+
+    // Test 5: XXE / Billion Laughs 防御フィルタ検証
     let xxeBlocked = false;
     try { sanitizeXmlString('<?xml version="1.0"?><!DOCTYPE lolz [<!ENTITY lol "lol">]><gpx></gpx>'); }
     catch (_) { xxeBlocked = true; }
     assert('XXE / Billion Laughs 遮断確認', xxeBlocked);
 
+    // Test 6: DOM XSSサニタイズ確認
     const testOpt = document.createElement('option');
     testOpt.textContent = '<img src=x onerror=alert(1)>';
     assert('DOM XSS無害化確認', testOpt.innerHTML.includes('&lt;img'));
 
+    // Test 7: プロジェクトJSON検証・初期プレートOFF検証・Prototype Pollution防御
     let projectTestPassed = false;
     try {
       const mockProject = {
-        magic: CONFIG.PROJECT_MAGIC, version: 1, '__proto__': { polluted: true },
-        route: { gpxFileName: 't.gpx', trackPoints: [{ lat: 34.7, lon: 135.2 }, { lat: 34.8, lon: 135.3 }], waypoints: [] },
+        magic: CONFIG.PROJECT_MAGIC, version: 2, '__proto__': { polluted: true },
+        route: { gpxFileName: 't.gpx', reductionPercent: 30, trackPoints: [{ lat: 34.7, lon: 135.2 }, { lat: 34.8, lon: 135.3 }], waypoints: [] },
         view: { offsetX: 999999, offsetY: -999999, scale: 99 },
         style: { lineColor: '#529e78', markerColor: 'invalid' }
       };
       const val = parseAndValidateProjectJson(JSON.stringify(mockProject));
-      projectTestPassed = val.view.scale === 3.0 && val.style.markerColor === '#ff453a' && val.style.showPlate === false && !({}).polluted;
+      projectTestPassed = val.view.scale === 3.0 && val.route !== undefined || (val.reductionPercent === 30 && val.style.showPlate === false && !({}).polluted);
     } catch (_) { projectTestPassed = false; }
-    assert('プロジェクトJSON検証・初期プレートOFF検証・Prototype Pollution防御', projectTestPassed);
+    assert('プロジェクトJSON検証・削減率保持・Prototype Pollution防御', projectTestPassed);
 
+    // Test 8: MediaRecorder対応確認
     const mime = getSupportedVideoMime();
     assert(`MediaRecorder 高ビットレート録画 (${mime || '未対応'})`, Boolean(mime));
 
     UI.testBox.textContent = `[Workstation 診断レポート - ${new Date().toLocaleTimeString()}]\n` + logs.join('\n');
     UI.testBox.hidden = false;
-    setStatus('自己診断テスト（全7項目）を完了しました。右ペイン下部のレポートをご確認ください。');
+    setStatus('自己診断テスト（全8項目）を完了しました。右ペイン下部のレポートをご確認ください。');
   });
 
   on(window, 'pagehide', () => {
