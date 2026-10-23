@@ -3,9 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src blob: data:; media-src blob:; connect-src 'self'; base-uri 'none'; form-action 'none';">
   <title>GPX Route Studio Workstation</title>
-  <link rel="stylesheet" href="style.css?v=202604">
+  <link rel="stylesheet" href="style.css?v=20261023_2">
 </head>
 <body>
 
@@ -157,7 +160,7 @@
         <div class="viewport-bar">
           <span id="metaInfo" class="meta-text">GPXファイルをドロップまたは選択してください。</span>
           <div class="viewport-tools">
-            <button type="button" id="btnToggleGuide" class="btn btn-xs" aria-pressed="true" title="動画編集時の配置確認用16:9セーフティ枠を表示します（書き出し時は自動で消えます）[ショートカット: G]">📏 セーフティ枠: ON</button>
+            <button type="button" id="btnToggleGuide" class="btn btn-xs" aria-pressed="false" title="動画編集時の配置確認用16:9セーフティ枠を表示します（書き出し時は自動で消えます）[ショートカット: G]">📏 セーフティ枠: OFF</button>
             <button type="button" id="btnResetAnim" class="btn btn-xs" title="アニメーション周期を先頭(0秒)にリセットします [ショートカット: Space]">⏮ アニメ先頭へ</button>
           </div>
         </div>
@@ -171,8 +174,8 @@
 
           <div id="canvasStage" class="canvas-stage" hidden>
             <canvas id="mainCanvas" width="1920" height="1080" tabindex="0" aria-label="登山ルートアニメーションプレビュー"></canvas>
-            <!-- セーフティガイドオーバーレイ（録画データには写り込まないDOM枠） -->
-            <div id="safetyGuideOverlay" class="safety-guide" aria-hidden="true">
+            <!-- セーフティガイドオーバーレイ（デフォルトOFF・録画データには写り込まないDOM枠） -->
+            <div id="safetyGuideOverlay" class="safety-guide" aria-hidden="true" hidden>
               <div class="guide-action-safe">
                 <span class="guide-label">90% Action Safe (1920×1080)</span>
               </div>
@@ -352,6 +355,6 @@
 
   </div>
 
-  <script src="app.js?v=202604" defer></script>
+  <script src="app.js?v=20261023_2" defer></script>
 </body>
 </html>
