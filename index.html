@@ -8,7 +8,7 @@
   <meta http-equiv="Expires" content="0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src blob: data:; media-src blob:; connect-src 'self'; base-uri 'none'; form-action 'none';">
   <title>GPX Route Studio Workstation</title>
-  <link rel="stylesheet" href="style.css?v=20261023_2">
+  <link rel="stylesheet" href="style.css?v=20261023_3">
 </head>
 <body>
 
@@ -40,11 +40,12 @@
 
         <div class="divider-v"></div>
 
-        <!-- プロジェクト管理ツールバー -->
+        <!-- プロジェクト＆GPX保存ツールバー -->
         <div class="toolbar-group" role="group" aria-label="プロジェクト管理">
           <button type="button" id="btnSaveProject" class="btn btn-toolbar" title="現在の編集状態をJSONファイルに保存します">💾 保存(.json)</button>
           <button type="button" id="btnLoadProject" class="btn btn-toolbar" title="保存したプロジェクトJSONを読み込みます">📁 再開(.json)</button>
           <input type="file" id="projectInput" accept=".json,application/json" hidden>
+          <button type="button" id="btnExportGpx" class="btn btn-toolbar" title="ポイント削減およびWaypoint編集を反映した軽量GPXファイルを書き出します">📥 軽量GPX保存(.gpx)</button>
           <button type="button" id="btnResetAll" class="btn btn-toolbar" title="初期状態にリセットします">初期化</button>
         </div>
       </div>
@@ -62,8 +63,8 @@
     <!-- ==================== 中央：3ペイン・メインワークスペース ==================== -->
     <main class="workspace-grid">
 
-      <!-- 【左ドック】配置プリセット ＆ Waypointダイレクト編集テーブル -->
-      <aside class="dock dock-left" aria-label="配置プリセットとWaypoint管理">
+      <!-- 【左ドック】配置・GPXポイント削減候補・Waypoint高機能エディタ -->
+      <aside class="dock dock-left" aria-label="配置プリセット・GPXポイント削減・Waypoint管理">
 
         <!-- セクション1: 配置プリセットサムネイル (5種) -->
         <section class="dock-section">
@@ -102,45 +103,83 @@
           </div>
         </section>
 
-        <!-- セクション2: Waypointダイレクト編集テーブル -->
+        <!-- セクション2: GPXポイント削減（形状維持・10%〜50%減の5候補選択） -->
+        <section class="dock-section">
+          <div class="section-header">
+            <h2>2. GPXポイント削減（形状維持）</h2>
+            <span id="reductionStatsBadge" class="badge">元データ (100%)</span>
+          </div>
+          <div class="reduction-grid" id="reductionCandidates" role="radiogroup" aria-label="GPXポイント削減候補">
+            <button type="button" class="reduction-btn" data-reduce="0" aria-pressed="true" title="削減なし（元のポイント数を維持）">
+              <span class="red-title">元データ</span>
+              <span class="red-pts" data-pts-for="0">- pts</span>
+            </button>
+            <button type="button" class="reduction-btn" data-reduce="10" aria-pressed="false" title="形状寄与度の低い直線上の点を10%削減">
+              <span class="red-title">-10% 削減</span>
+              <span class="red-pts" data-pts-for="10">- pts</span>
+            </button>
+            <button type="button" class="reduction-btn" data-reduce="20" aria-pressed="false" title="形状を維持したまま20%削減">
+              <span class="red-title">-20% 削減</span>
+              <span class="red-pts" data-pts-for="20">- pts</span>
+            </button>
+            <button type="button" class="reduction-btn" data-reduce="30" aria-pressed="false" title="形状を維持したまま30%削減（推奨バランス）">
+              <span class="red-title">-30% 削減</span>
+              <span class="red-pts" data-pts-for="30">- pts</span>
+            </button>
+            <button type="button" class="reduction-btn" data-reduce="40" aria-pressed="false" title="重要屈曲点とWaypoint周辺を保護して40%削減">
+              <span class="red-title">-40% 削減</span>
+              <span class="red-pts" data-pts-for="40">- pts</span>
+            </button>
+            <button type="button" class="reduction-btn" data-reduce="50" aria-pressed="false" title="重要屈曲点とWaypoint周辺を保護して50%半減">
+              <span class="red-title">-50% 削減</span>
+              <span class="red-pts" data-pts-for="50">- pts</span>
+            </button>
+          </div>
+          <div class="reduction-footer">
+            <span id="reductionErrorInfo" class="sub-label">形状誤差: 0.0m (Waypointアンカー保護済)</span>
+            <button type="button" id="btnExportGpxSide" class="btn btn-xs btn-secondary" title="選択中の削減率とWaypoint編集を反映したGPXファイルを保存します">📥 削減GPX出力</button>
+          </div>
+        </section>
+
+        <!-- セクション3: 強化版 Waypointダイレクト編集スタジオ -->
         <section class="dock-section dock-section-grow">
           <div class="section-header">
-            <h2>2. Waypoint（地名・点滅）直接編集</h2>
+            <h2>3. Waypoint編集スタジオ</h2>
             <span id="blinkCountBadge" class="badge">点滅: 0箇所</span>
           </div>
 
-          <div class="table-toolbar">
-            <button type="button" id="btnBlinkAllOn" class="btn btn-xs">⚡ 全点滅ON</button>
-            <button type="button" id="btnBlinkAllOff" class="btn btn-xs">⚪ 全点滅OFF</button>
-            <button type="button" id="btnLabelAllToggle" class="btn btn-xs">👁 地名一括切替</button>
+          <div class="table-toolbar-4">
+            <button type="button" id="btnBlinkAllOn" class="btn btn-xs" title="全地点の点滅をON">⚡全点滅</button>
+            <button type="button" id="btnBlinkAllOff" class="btn btn-xs" title="全地点の点滅をOFF">⚪全消灯</button>
+            <button type="button" id="btnLabelAllToggle" class="btn btn-xs" title="全地名ラベルの表示切替">👁全ラベル</button>
+            <button type="button" id="btnToggleWptDragMode" class="btn btn-xs" aria-pressed="false" title="ONにするとキャンバス上のWaypointピンをマウスドラッグで直接移動できます（Shift+ドラッグでも常時可能）">✋ピン移動:OFF</button>
           </div>
 
           <div class="wpt-table-head">
-            <span title="クリックで点滅ON/OFF（Shift+クリックで単独点滅）">点滅</span>
-            <span title="地名ラベル表示のON/OFF">表示</span>
-            <span>日本語地名（クリックで直接書き換え）</span>
-            <span>削除</span>
+            <span title="点滅ON/OFF（Shift+クリックで単独点滅）">点滅</span>
+            <span title="ラベル表示ON/OFF">表示</span>
+            <span>地名（直接編集）</span>
+            <span title="ラベルの引き出し方向（自動/8方向）">方向</span>
+            <span title="最寄りのルート線上へ吸着 / 順序移動 / 削除">操作</span>
           </div>
 
           <div id="wptTableBody" class="wpt-table-body" role="region" aria-label="Waypoint直接編集リスト"></div>
           <select id="wptSelect" hidden></select>
         </section>
 
-        <!-- セクション3: 距離比例シーク ＆ 任意地点追加 -->
+        <!-- セクション4: 距離比例シーク ＆ 任意地点追加 -->
         <section class="dock-section">
           <div class="section-header">
-            <h2>3. ルート距離比例シーク＆地点追加</h2>
+            <h2>4. ルート距離シーク＆地点追加</h2>
             <span id="seekBadge" class="badge">50%地点</span>
           </div>
           <div class="control-row">
             <input type="range" id="routeSeekRange" min="0" max="1000" value="500" title="ルート上の位置を距離比例で移動します">
+            <button type="button" id="btnToggleSeekBlink" class="btn btn-xs" aria-pressed="false" title="シーク位置の点滅ON/OFF">⚡点滅:OFF</button>
           </div>
           <div class="control-row">
-            <button type="button" id="btnToggleSeekBlink" class="btn btn-sm btn-block" aria-pressed="false">⚡ シーク位置を点滅: OFF</button>
-          </div>
-          <div class="control-row">
-            <input type="text" id="newSeekWptInput" class="text-input" maxlength="40" placeholder="地名を入力 (例: 槍ヶ岳山荘)">
-            <button type="button" id="btnAddWptAtSeek" class="btn btn-sm btn-secondary">＋ 追加</button>
+            <input type="text" id="newSeekWptInput" class="text-input" maxlength="40" placeholder="新規地名 (例: 槍ヶ岳山荘)">
+            <button type="button" id="btnAddWptAtSeek" class="btn btn-sm btn-secondary">＋シーク位置に追加</button>
           </div>
         </section>
 
@@ -149,7 +188,7 @@
       <!-- 【中央ペイン】専用ドロップバー ＆ 16:9 メインビューポート -->
       <section class="viewport-pane" aria-label="メインプレビュービューポート">
 
-        <!-- 常設ドラッグ＆ドロップゾーン（クリック＆ドロップ両対応） -->
+        <!-- 常設ドラッグ＆ドロップゾーン -->
         <label id="fileZone" class="file-zone" tabindex="0">
           <span class="file-zone-main">📂 ここに GPXファイル (.gpx) ／ 背景写真 ／ 保存プロジェクト (.json) をドラッグ＆ドロップ（またはクリックして選択）</span>
           <span id="pointBadge" class="badge">0 pts</span>
@@ -160,12 +199,13 @@
         <div class="viewport-bar">
           <span id="metaInfo" class="meta-text">GPXファイルをドロップまたは選択してください。</span>
           <div class="viewport-tools">
+            <button type="button" id="btnSnapAllWpts" class="btn btn-xs" title="すべてのWaypointを最寄りのルート線上へ一括吸着（スナップ）させます">🧲 全Wptをルートへ吸着</button>
             <button type="button" id="btnToggleGuide" class="btn btn-xs" aria-pressed="false" title="動画編集時の配置確認用16:9セーフティ枠を表示します（書き出し時は自動で消えます）[ショートカット: G]">📏 セーフティ枠: OFF</button>
             <button type="button" id="btnResetAnim" class="btn btn-xs" title="アニメーション周期を先頭(0秒)にリセットします [ショートカット: Space]">⏮ アニメ先頭へ</button>
           </div>
         </div>
 
-        <!-- 16:9 キャンバスステージ（ここへの直接ドロップ・クリックにも対応） -->
+        <!-- 16:9 キャンバスステージ -->
         <div class="preview" id="previewContainer">
           <div id="emptyState" class="empty" role="button" tabindex="0" title="クリックしてGPXファイルを選択、またはここにファイルをドロップ">
             <strong>📂 GPXファイルをここにドロップして開始</strong>
@@ -192,6 +232,7 @@
         <div id="wptEditorPanel" class="floating-editor" hidden>
           <label for="wptNameInput" id="wptEditorTitle">ダブルクリック地点にWaypointを追加:</label>
           <input type="text" id="wptNameInput" class="text-input" maxlength="40" placeholder="例: 穂高岳山荘">
+          <label class="inline-chk"><input type="checkbox" id="wptSnapOnAdd" checked>最寄りルートに吸着</label>
           <button type="button" id="btnSaveWptName" class="btn btn-sm btn-primary">確定 (Enter)</button>
           <button type="button" id="btnCancelWptName" class="btn btn-sm">キャンセル (Esc)</button>
         </div>
@@ -201,10 +242,10 @@
       <!-- 【右ドック】スタイル・アニメーション・クロマキー出力インスペクター -->
       <aside class="dock dock-right" aria-label="スタイルおよび動画書き出し設定">
 
-        <!-- セクション4: ルート線画＆ラベル外観 -->
+        <!-- セクション5: ルート線画＆ラベル外観 -->
         <section class="dock-section">
           <div class="section-header">
-            <h2>4. ルート線画 ＆ 地名スタイル</h2>
+            <h2>5. ルート線画 ＆ 地名スタイル</h2>
             <span id="lineColorBadge" class="badge">#FFFFFF</span>
           </div>
 
@@ -243,10 +284,10 @@
           <span id="sizeBadge" hidden>5px / 20px</span>
         </section>
 
-        <!-- セクション5: 現在地マーカー＆アニメーション設定 -->
+        <!-- セクション6: 現在地マーカー＆アニメーション設定 -->
         <section class="dock-section">
           <div class="section-header">
-            <h2>5. 現在地マーカー ＆ 点滅演出</h2>
+            <h2>6. 現在地マーカー ＆ 点滅演出</h2>
             <span id="markerColorBadge" class="badge">#FF453A</span>
           </div>
 
@@ -290,10 +331,10 @@
           <span id="speedBadge" hidden>2.0x / 10px</span>
         </section>
 
-        <!-- セクション6: 動画合成・クロマキー出力設定 -->
+        <!-- セクション7: 動画合成・クロマキー出力設定 -->
         <section class="dock-section">
           <div class="section-header">
-            <h2>6. 動画合成モード ＆ 書き出し</h2>
+            <h2>7. 動画合成モード ＆ 書き出し</h2>
             <span id="secBadge" class="badge">5秒</span>
           </div>
 
@@ -344,9 +385,9 @@
       </div>
       <div class="shortcut-hints">
         <span><b>ドラッグ</b>: 地図移動</span>
+        <span><b>Shift+ピン</b>: Wpt移動</span>
         <span><b>ホイール</b>: 拡縮</span>
-        <span><b>ダブルクリック</b>: 地点追加</span>
-        <span><b>矢印キー</b>: 微調整</span>
+        <span><b>Wクリック</b>: 地点追加</span>
         <span><b>[G]</b>: ガイド枠</span>
         <span><b>[P]</b>: プレート</span>
         <span><b>[Space]</b>: 先頭再生</span>
@@ -355,6 +396,6 @@
 
   </div>
 
-  <script src="app.js?v=20261023_2" defer></script>
+  <script src="app.js?v=20261023_3" defer></script>
 </body>
 </html>
