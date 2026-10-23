@@ -1,9 +1,11 @@
 /**
  * GPX Route Studio Workstation - Production Core Engine (app.js)
- * New Features:
- *  - Importance-Ranked RDP Track Simplification with 5 Selectable Reduction Candidates (-10%, -20%, -30%, -40%, -50%)
- *  - Waypoint Studio Enhancements: 8-Way + Auto Label Direction, Snap-to-Route, Reordering, Direct Canvas Dragging
- *  - Clean GPX File Export (.gpx) reflecting reduced track points & edited waypoints
+ * Features:
+ *  - Background Video (.mp4 / .webm / .mov) & Photo Overlay Compositing with strict memory cleanup
+ *  - Dual Video Export: WebM (VP9/VP8 Alpha) & MP4 (H.264/AVC1)
+ *  - Importance-Ranked RDP Track Simplification (-10% to -50% candidates) & GPX Export
+ *  - Enhanced Waypoint Studio (8-way + Auto label direction, Snap-to-Route, Reorder, Canvas Dragging)
+ *  - Exposes read-only window.GPXStudioEngine for standalone test suite (test.html / test.js)
  */
 (() => {
   'use strict';
@@ -30,6 +32,7 @@
     SAMPLE_GPX_FILE: 'sample_routegpx.gpx',
     MAX_GPX_BYTES: 25 * 1024 * 1024,
     MAX_PHOTO_BYTES: 30 * 1024 * 1024,
+    MAX_VIDEO_BYTES: 500 * 1024 * 1024, // 背景動画 500MB上限
     MAX_PROJECT_BYTES: 25 * 1024 * 1024,
     MAX_XML_LENGTH: 30 * 1024 * 1024,
     MAX_RAW_PTS: 50000,
@@ -45,16 +48,15 @@
   const ALLOWED_ANIM_TYPES = Object.freeze(['pulse', 'blink', 'radar', 'progress']);
   const ALLOWED_BG_MODES = Object.freeze(['transparent', 'green', 'blue', 'black']);
 
-  // Waypointラベルの8方向＋自動配置定義
   const LABEL_DIRS = Object.freeze([
     { key: 'auto', icon: '✦', title: '自動配置（ルート外向き）', dx: 1, dy: 0 },
-    { key: 'E',    icon: '→', title: '右 (東)',   dx: 1,    dy: 0 },
+    { key: 'E',    icon: '→', title: '右 (東)',     dx: 1,    dy: 0 },
     { key: 'NE',   icon: '↗', title: '右上 (北東)', dx: 0.8,  dy: -0.7 },
-    { key: 'N',    icon: '↑', title: '上 (北)',   dx: 0,    dy: -1 },
+    { key: 'N',    icon: '↑', title: '上 (北)',     dx: 0,    dy: -1 },
     { key: 'NW',   icon: '↖', title: '左上 (北西)', dx: -0.8, dy: -0.7 },
-    { key: 'W',    icon: '←', title: '左 (西)',   dx: -1,   dy: 0 },
+    { key: 'W',    icon: '←', title: '左 (西)',     dx: -1,   dy: 0 },
     { key: 'SW',   icon: '↙', title: '左下 (南西)', dx: -0.8, dy: 0.7 },
-    { key: 'S',    icon: '↓', title: '下 (南)',   dx: 0,    dy: 1 },
+    { key: 'S',    icon: '↓', title: '下 (南)',     dx: 0,    dy: 1 },
     { key: 'SE',   icon: '↘', title: '右下 (南東)', dx: 0.8,  dy: 0.7 }
   ]);
 
@@ -68,18 +70,16 @@
 
   // --- 3. DOM要素の取得 ---
   const canvas = document.getElementById('mainCanvas');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d', { alpha: true });
+  const ctx = canvas ? canvas.getContext('2d', { alpha: true }) : null;
 
   const UI = Object.freeze({
     btnOpenFile: document.getElementById('btnOpenFile'),
+    btnClearMedia: document.getElementById('btnClearMedia'),
     btnSaveProject: document.getElementById('btnSaveProject'),
     btnLoadProject: document.getElementById('btnLoadProject'),
     projectInput: document.getElementById('projectInput'),
     btnExportGpx: document.getElementById('btnExportGpx'),
     btnExportGpxSide: document.getElementById('btnExportGpxSide'),
-    btnSample: document.getElementById('btnSample'),
-    btnSelfTest: document.getElementById('btnSelfTest'),
     btnResetAll: document.getElementById('btnResetAll'),
     pointBadge: document.getElementById('pointBadge'),
     fileZone: document.getElementById('fileZone'),
@@ -89,6 +89,7 @@
     emptyState: document.getElementById('emptyState'),
     canvasStage: document.getElementById('canvasStage'),
     safetyGuideOverlay: document.getElementById('safetyGuideOverlay'),
+    btnSyncVideoDur: document.getElementById('btnSyncVideoDur'),
     btnSnapAllWpts: document.getElementById('btnSnapAllWpts'),
     btnToggleGuide: document.getElementById('btnToggleGuide'),
     btnResetAnim: document.getElementById('btnResetAnim'),
@@ -96,7 +97,6 @@
     reductionCandidates: document.getElementById('reductionCandidates'),
     reductionStatsBadge: document.getElementById('reductionStatsBadge'),
     reductionErrorInfo: document.getElementById('reductionErrorInfo'),
-    btnClearPhoto: document.getElementById('btnClearPhoto'),
     lineColorRow: document.getElementById('lineColorRow'),
     lineCustomColor: document.getElementById('lineCustomColor'),
     lineColorBadge: document.getElementById('lineColorBadge'),
@@ -142,29 +142,30 @@
     recordSecNum: document.getElementById('recordSecNum'),
     secBadge: document.getElementById('secBadge'),
     chromaHint: document.getElementById('chromaHint'),
-    btnExportVideo: document.getElementById('btnExportVideo'),
+    btnExportWebm: document.getElementById('btnExportWebm'),
+    btnExportMp4: document.getElementById('btnExportMp4'),
     btnExportPng: document.getElementById('btnExportPng'),
-    btnExportVideoSide: document.getElementById('btnExportVideoSide'),
+    btnExportWebmSide: document.getElementById('btnExportWebmSide'),
+    btnExportMp4Side: document.getElementById('btnExportMp4Side'),
     btnExportPngSide: document.getElementById('btnExportPngSide'),
-    statusBox: document.getElementById('statusBox'),
-    testBox: document.getElementById('testBox')
+    statusBox: document.getElementById('statusBox')
   });
 
   // --- 4. アプリケーション状態管理（起動時は背景プレート OFF・ガイド枠 OFF） ---
   const State = {
     loadSessionId: 0,
     gpxFileName: '',
-    originalPoints: [],     // 読み込んだ元の全トラックポイント [{ lat, lon, ele }]
-    pointImportance: null,  // Float64Array: 各頂点のRDP形状重要度スコア
-    reductionPercent: 0,    // 選択中の削減率 (0 | 10 | 20 | 30 | 40 | 50)
-    currentErrorMeters: 0,  // 現在の削減率における最大形状誤差(m)
-    trackPoints: [],        // 現在選択中の削減率が適用されたアクティブ頂点配列
+    originalPoints: [],
+    pointImportance: null,
+    reductionPercent: 0,
+    currentErrorMeters: 0,
+    trackPoints: [],
     cumDist: new Float64Array(0),
     totalDist: 0,
-    waypoints: [],          // [{ id, lat, lon, name, visible, blinking, labelDir }]
+    waypoints: [],
     selectedWptId: null,
-    wptDragMode: false,     // キャンバス上でのWaypoint直接ドラッグ移動モード
-    draggingWpt: null,      // 現在ドラッグ中のWaypoint参照
+    wptDragMode: false,
+    draggingWpt: null,
     seekRatio: 0.5,
     seekPoint: null,
     seekBlinking: false,
@@ -180,12 +181,18 @@
       centerLat: 35, cosLat: 1, lonSpan: 0.01, latSpan: 0.01, maxSpan: 0.01
     },
     view: { offsetX: 1580, offsetY: 790, scale: 0.55 },
+    // 背景メディア（静止画オフスクリーンCanvas または 動画Element）
     bgBufferCanvas: null,
     bgPhotoName: '',
+    bgVideoEl: null,
+    bgVideoUrl: null,
+    bgVideoName: '',
+    bgVideoDuration: 0,
     animStartTime: performance.now(),
     rafId: null,
     isPageVisible: true,
     isRecording: false,
+    recordingFormat: null, // 'webm' | 'mp4' | null
     mediaRecorder: null,
     activeStream: null,
     recordTimer: null,
@@ -259,31 +266,50 @@
     if (!UI.bgModeSelect || !UI.chromaHint) return;
     const mode = UI.bgModeSelect.value;
     if (mode === 'green') {
-      UI.chromaHint.textContent = 'グリーンバック出力：スピル（緑かぶり）防止のため半透明混合を自動抑止します。';
+      UI.chromaHint.textContent = 'グリーンバック出力：スピル（緑かぶり）防止のため半透明混合を自動抑止します（WebM / MP4両対応）。';
       if (isGreenHue(State.lineColor) || isGreenHue(State.markerColor)) {
         setStatus('注意: グリーンバック選択中に緑系の線・マーカーを使うとクロマキーで一緒に透過されます。赤や白への変更を推奨します。', true);
       }
     } else if (mode === 'blue') {
-      UI.chromaHint.textContent = 'ブルーバック出力：スピル（青かぶり）防止のため半透明混合を自動抑止します。';
+      UI.chromaHint.textContent = 'ブルーバック出力：スピル（青かぶり）防止のため半透明混合を自動抑止します（WebM / MP4両対応）。';
       if (isBlueHue(State.lineColor) || isBlueHue(State.markerColor)) {
         setStatus('注意: ブルーバック選択中に青系の線・マーカーを使うとクロマキーで一緒に透過されます。赤や黄への変更を推奨します。', true);
       }
     } else if (mode === 'black') {
-      UI.chromaHint.textContent = 'ブラック背景出力：編集ソフトのブレンドモード「スクリーン」または「加算」で黒背景が抜けます。';
+      UI.chromaHint.textContent = 'ブラック背景出力：編集ソフトのブレンドモード「スクリーン」または「加算」で黒背景が抜けます（WebM / MP4両対応）。';
     } else {
-      UI.chromaHint.textContent = '背景透過モード：Premiere / DaVinci等でそのまま重ねられるアルファ付きWebM（または写真合成）です。';
+      UI.chromaHint.textContent = '背景透過はWebM形式に対応。MP4書き出し時は背景動画・写真合成やグリーンバック等に最適です。';
     }
   }
 
-  // --- 6. メモリ管理：写真オフスクリーンバッファ＆録画ストリーム解放 ---
-  function releasePhotoMemory() {
+  // --- 6. メモリ管理：背景写真＆背景動画＆録画ストリームの完全解放 ---
+  function releaseMediaMemory() {
+    // 静止画バッファ解放
     if (State.bgBufferCanvas) {
       State.bgBufferCanvas.width = 0;
       State.bgBufferCanvas.height = 0;
       State.bgBufferCanvas = null;
     }
     State.bgPhotoName = '';
-    if (UI.btnClearPhoto) UI.btnClearPhoto.disabled = true;
+
+    // 背景動画ストリーム・デコーダ解放
+    if (State.bgVideoEl) {
+      try {
+        State.bgVideoEl.pause();
+        State.bgVideoEl.removeAttribute('src');
+        State.bgVideoEl.load();
+      } catch (_) {}
+      State.bgVideoEl = null;
+    }
+    if (State.bgVideoUrl) {
+      URL.revokeObjectURL(State.bgVideoUrl);
+      State.bgVideoUrl = null;
+    }
+    State.bgVideoName = '';
+    State.bgVideoDuration = 0;
+
+    if (UI.btnClearMedia) UI.btnClearMedia.disabled = true;
+    if (UI.btnSyncVideoDur) UI.btnSyncVideoDur.hidden = true;
     updateMetaText();
     renderPresetThumbnails();
   }
@@ -312,6 +338,23 @@
     return offCanvas;
   }
 
+  function drawVideoCover(targetCtx, videoEl, targetW, targetH) {
+    const vw = videoEl.videoWidth;
+    const vh = videoEl.videoHeight;
+    if (!vw || !vh) return;
+    const vidR = vw / vh;
+    const canR = targetW / targetH;
+    let dw = targetW, dh = targetH, dx = 0, dy = 0;
+    if (vidR > canR) {
+      dw = targetH * vidR;
+      dx = (targetW - dw) * 0.5;
+    } else {
+      dh = targetW / vidR;
+      dy = (targetH - dh) * 0.5;
+    }
+    targetCtx.drawImage(videoEl, dx, dy, dw, dh);
+  }
+
   function releaseRecordingMemory() {
     if (State.recordTimer) {
       clearTimeout(State.recordTimer);
@@ -323,20 +366,18 @@
     }
     State.mediaRecorder = null;
     State.isRecording = false;
+    State.recordingFormat = null;
     if (UI.fileZone) UI.fileZone.classList.remove('disabled');
     if (UI.fileInput) UI.fileInput.disabled = false;
     if (UI.btnSaveProject) UI.btnSaveProject.disabled = false;
     if (UI.btnLoadProject) UI.btnLoadProject.disabled = false;
-    if (UI.btnExportVideo) UI.btnExportVideo.textContent = '🎬 動画書き出し (.webm)';
-    if (UI.btnExportVideoSide) UI.btnExportVideoSide.textContent = '🎬 合成用アニメーション動画を書き出す (.webm)';
+    if (UI.btnExportWebm) UI.btnExportWebm.textContent = '🎬 WebM書き出し (.webm)';
+    if (UI.btnExportMp4) UI.btnExportMp4.textContent = '🎬 MP4書き出し (.mp4)';
+    if (UI.btnExportWebmSide) UI.btnExportWebmSide.textContent = '🎬 WebM保存 (.webm)';
+    if (UI.btnExportMp4Side) UI.btnExportMp4Side.textContent = '🎬 MP4保存 (.mp4)';
   }
 
-  // --- 7. 新アルゴリズム：重要度ランキング式 RDP（10%〜50%削減の5候補リアルタイム生成） ---
-
-  /**
-   * 全てのトラック頂点に対し、RDP法に基づく「形状への寄与度（メートル単位の垂線距離スコア）」を計算する。
-   * 始点・終点および各Waypointの最近傍点は Infinity を付与して絶対に削られないように保護する。
-   */
+  // --- 7. 重要度ランキング式 RDP（10%〜50%削減の5候補リアルタイム生成） ---
   function computePointImportanceScores(points, waypoints) {
     const len = points.length;
     const scores = new Float64Array(len);
@@ -385,14 +426,12 @@
       }
 
       const distMeters = Math.sqrt(Math.max(0, maxDistSq)) * METERS_PER_DEG;
-      // 親分割点のスコアを超えないように単調性を保証
       const effectiveScore = Math.min(parentScore, distMeters);
       scores[splitIdx] = effectiveScore;
 
       stack.push([first, splitIdx, effectiveScore], [splitIdx, last, effectiveScore]);
     }
 
-    // Waypointの最近傍トラック頂点をアンカーとして強制保護（Infinity付与）
     if (Array.isArray(waypoints)) {
       for (let w = 0; w < waypoints.length; w++) {
         const wpt = waypoints[w];
@@ -410,9 +449,6 @@
     return scores;
   }
 
-  /**
-   * 指定された削減率（0, 10, 20, 30, 40, 50%）に基づき、重要度上位のポイントのみを抽出する
-   */
   function extractReducedTrack(originalPts, scores, reductionPct) {
     const n = originalPts.length;
     if (n <= 2 || reductionPct <= 0) {
@@ -424,7 +460,6 @@
       return { points: originalPts.slice(), maxErrorMeters: 0 };
     }
 
-    // インデックスをスコア降順でソートして上位 targetCount 個を採用
     const indices = Array.from({ length: n }, (_, i) => i);
     indices.sort((a, b) => scores[b] - scores[a]);
 
@@ -433,7 +468,6 @@
       keepFlags[indices[i]] = 1;
     }
 
-    // 除外された点の中で最大の誤差スコアを取得（形状誤差メートル表示用）
     const maxRemovedScore = scores[indices[targetCount]];
     const maxErrorMeters = Number.isFinite(maxRemovedScore) ? maxRemovedScore : 0;
 
@@ -444,9 +478,6 @@
     return { points: result, maxErrorMeters };
   }
 
-  /**
-   * 選択された削減率（0%〜50%）を適用し、候補ボタンUI・統計バッジ・プレビューを即時更新する
-   */
   function applyReductionPercentage(percent) {
     const validPct = REDUCTION_RATES.includes(percent) ? percent : 0;
     State.reductionPercent = validPct;
@@ -571,9 +602,6 @@
     };
   }
 
-  /**
-   * 指定した座標 (lat, lon) から現在のルート上で最も近い頂点の座標を返す（ルート吸着・スナップ機能）
-   */
   function findNearestTrackPoint(lat, lon) {
     const tp = State.trackPoints;
     if (tp.length === 0) return { lat, lon };
@@ -657,14 +685,17 @@
   // --- 10. ビューポート情報＆5配置サムネイル描画 ---
   function updateMetaText() {
     const hasTrack = State.trackPoints.length > 0;
-    if (UI.emptyState) UI.emptyState.hidden = hasTrack;
-    if (UI.canvasStage) UI.canvasStage.hidden = !hasTrack;
-    canvas.hidden = !hasTrack;
-    if (UI.safetyGuideOverlay) UI.safetyGuideOverlay.hidden = !hasTrack || !State.showGuide;
+    const hasBgMedia = Boolean(State.bgBufferCanvas || State.bgVideoEl);
+    const showCanvas = hasTrack || hasBgMedia;
 
-    if (!hasTrack) {
+    if (UI.emptyState) UI.emptyState.hidden = showCanvas;
+    if (UI.canvasStage) UI.canvasStage.hidden = !showCanvas;
+    if (canvas) canvas.hidden = !showCanvas;
+    if (UI.safetyGuideOverlay) UI.safetyGuideOverlay.hidden = !showCanvas || !State.showGuide;
+
+    if (!hasTrack && !hasBgMedia) {
       if (UI.pointBadge) UI.pointBadge.textContent = '0 pts';
-      if (UI.metaInfo) UI.metaInfo.textContent = 'GPXファイルまたはプロジェクト(.json)をドロップしてください';
+      if (UI.metaInfo) UI.metaInfo.textContent = 'GPXファイル・背景写真・背景動画・プロジェクト(.json)をドロップしてください';
       return;
     }
 
@@ -675,8 +706,18 @@
       : `${curCount.toLocaleString()} pts`;
     if (UI.pointBadge) UI.pointBadge.textContent = ptText;
 
-    const photoText = State.bgPhotoName ? ` ｜ 写真: ${State.bgPhotoName}` : ' ｜ 背景: 透過/クロマキー';
-    if (UI.metaInfo) UI.metaInfo.textContent = `${State.gpxFileName}（${ptText} / Wpt: ${State.waypoints.length}箇所）${photoText}`;
+    let mediaLabel = ' ｜ 背景: 透過/クロマキー';
+    if (State.bgVideoName) {
+      const durStr = State.bgVideoDuration > 0 ? ` (${State.bgVideoDuration.toFixed(1)}s)` : '';
+      mediaLabel = ` ｜ 背景動画: ${State.bgVideoName}${durStr}`;
+    } else if (State.bgPhotoName) {
+      mediaLabel = ` ｜ 背景写真: ${State.bgPhotoName}`;
+    }
+
+    const routeLabel = hasTrack
+      ? `${State.gpxFileName}（${ptText} / Wpt: ${State.waypoints.length}箇所）`
+      : 'GPX未読込（背景メディアのみプレビュー中）';
+    if (UI.metaInfo) UI.metaInfo.textContent = `${routeLabel}${mediaLabel}`;
   }
 
   function renderPresetThumbnails() {
@@ -693,7 +734,11 @@
       const w = thumbCanvas.width, h = thumbCanvas.height;
       tCtx.clearRect(0, 0, w, h);
 
-      if (State.bgBufferCanvas) {
+      if (State.bgVideoEl && State.bgVideoEl.readyState >= 2) {
+        drawVideoCover(tCtx, State.bgVideoEl, w, h);
+        tCtx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+        tCtx.fillRect(0, 0, w, h);
+      } else if (State.bgBufferCanvas) {
         tCtx.drawImage(State.bgBufferCanvas, 0, 0, w, h);
         tCtx.fillStyle = 'rgba(0, 0, 0, 0.22)';
         tCtx.fillRect(0, 0, w, h);
@@ -728,7 +773,8 @@
       const lastPt = projectCustom(last.lat, last.lon, ox, oy, sc, baseSize);
       tCtx.lineTo(lastPt.x, lastPt.y);
 
-      tCtx.strokeStyle = State.lineColor === '#ffffff' && !State.showPlate && !State.bgBufferCanvas ? '#133926' : State.lineColor;
+      const hasMediaBg = Boolean(State.bgBufferCanvas || State.bgVideoEl);
+      tCtx.strokeStyle = State.lineColor === '#ffffff' && !State.showPlate && !hasMediaBg ? '#133926' : State.lineColor;
       tCtx.lineWidth = 2;
       tCtx.stroke();
 
@@ -743,7 +789,7 @@
     });
   }
 
-  // --- 11. セキュアGPX / JSON / 写真ローダー & 軽量GPXエクスポート ---
+  // --- 11. セキュアGPX / JSON / 写真 / 動画ローダー & 軽量GPXエクスポート ---
   function sanitizeXmlString(xmlText) {
     if (xmlText.length > CONFIG.MAX_XML_LENGTH) throw new Error('XMLサイズが上限を超えています。');
     const cleaned = xmlText.replace(/^\uFEFF/, '').trimStart();
@@ -770,9 +816,6 @@
       .replace(/'/g, '&apos;');
   }
 
-  /**
-   * 現在の削減済みトラックポイントと編集済みWaypointを標準GPX 1.1形式で書き出す
-   */
   function exportReducedGpxFile() {
     if (State.trackPoints.length < 2) {
       setStatus('書き出すGPXルートデータがありません。先にGPXを読み込んでください。', true);
@@ -828,12 +871,58 @@
       const lowerName = (file.name || '').toLowerCase();
       const mime = (file.type || '').toLowerCase();
 
+      // A. 背景動画ファイル（.mp4 / .webm / .mov）の読み込み
+      if (mime.startsWith('video/') || /\.(mp4|webm|mov|m4v)$/i.test(lowerName)) {
+        if (file.size > CONFIG.MAX_VIDEO_BYTES) {
+          setStatus(`エラー: 動画「${file.name}」が上限(500MB)を超えています。`, true);
+          continue;
+        }
+        releaseMediaMemory();
+        const vidUrl = URL.createObjectURL(file);
+        const video = document.createElement('video');
+        video.muted = true;
+        video.loop = true;
+        video.playsInline = true;
+        video.preload = 'auto';
+
+        await new Promise((resolve) => {
+          video.onloadeddata = () => {
+            if (currentSession !== State.loadSessionId) {
+              URL.revokeObjectURL(vidUrl);
+              resolve();
+              return;
+            }
+            State.bgVideoEl = video;
+            State.bgVideoUrl = vidUrl;
+            State.bgVideoName = file.name;
+            State.bgVideoDuration = Number.isFinite(video.duration) ? video.duration : 0;
+            if (UI.btnClearMedia) UI.btnClearMedia.disabled = false;
+            if (UI.btnSyncVideoDur && State.bgVideoDuration >= 2) {
+              UI.btnSyncVideoDur.hidden = false;
+            }
+            video.play().catch(() => {});
+            updateMetaText();
+            renderPresetThumbnails();
+            setStatus(`背景動画「${file.name}」を読み込みました。ルート線画とリアルタイム合成されます。`);
+            resolve();
+          };
+          video.onerror = () => {
+            URL.revokeObjectURL(vidUrl);
+            setStatus(`動画「${file.name}」のデコードに失敗しました（未対応のコーデックの可能性があります）。`, true);
+            resolve();
+          };
+          video.src = vidUrl;
+        });
+        continue;
+      }
+
+      // B. 背景写真ファイル（.jpg / .png / .webp）の読み込み
       if (mime.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(lowerName)) {
         if (file.size > CONFIG.MAX_PHOTO_BYTES) {
           setStatus(`エラー: 画像「${file.name}」が上限(30MB)を超えています。`, true);
           continue;
         }
-        releasePhotoMemory();
+        releaseMediaMemory();
         const tempUrl = URL.createObjectURL(file);
         const img = new Image();
         await new Promise((resolve) => {
@@ -841,7 +930,7 @@
             if (currentSession === State.loadSessionId && img.naturalWidth > 0 && img.naturalHeight > 0) {
               State.bgBufferCanvas = createPrescaledPhotoBuffer(img);
               State.bgPhotoName = file.name;
-              if (UI.btnClearPhoto) UI.btnClearPhoto.disabled = false;
+              if (UI.btnClearMedia) UI.btnClearMedia.disabled = false;
               updateMetaText();
               renderPresetThumbnails();
               setStatus(`背景写真「${file.name}」をセットしました。`);
@@ -861,6 +950,7 @@
         continue;
       }
 
+      // C. プロジェクトJSON または GPXファイルの読み込み
       if (file.size > CONFIG.MAX_GPX_BYTES) {
         setStatus(`エラー: ファイル「${file.name}」が上限サイズ(25MB)を超えています。`, true);
         continue;
@@ -938,10 +1028,9 @@
         State.pointImportance = computePointImportanceScores(State.originalPoints, State.waypoints);
         closeFloatingAddBar(false);
 
-        // 初期状態は元データ（0%削減）または現在選択中の削減率を適用
         applyReductionPercentage(State.reductionPercent);
         syncWaypointSelectUI();
-        setStatus(`GPX「${State.gpxFileName}」(${State.originalPoints.length.toLocaleString()}点) を読み込みました。左パネルで10%〜50%のポイント削減候補を選択できます。`);
+        setStatus(`GPX「${State.gpxFileName}」(${State.originalPoints.length.toLocaleString()}点) を読み込みました。`);
       } catch (err) {
         setStatus(`ファイル読込エラー (${file.name}): ${err.message}`, true);
       }
@@ -955,6 +1044,16 @@
   });
   on(UI.emptyState, 'click', () => {
     if (!State.isRecording && UI.fileInput) UI.fileInput.click();
+  });
+
+  // 背景動画の長さに録画秒数を合わせるボタン
+  on(UI.btnSyncVideoDur, 'click', () => {
+    if (!State.bgVideoEl || State.bgVideoDuration <= 0) return;
+    const sec = clampNumber(Math.round(State.bgVideoDuration), 2, 60, 5);
+    if (UI.recordSecRange) UI.recordSecRange.value = String(sec);
+    if (UI.recordSecNum) UI.recordSecNum.value = String(sec);
+    if (UI.secBadge) UI.secBadge.textContent = `${sec}秒`;
+    setStatus(`録画秒数を背景動画の長さ（約${sec}秒）に合わせました。`);
   });
 
   function handleDragOver(e) {
@@ -995,7 +1094,7 @@
   on(UI.previewContainer, 'dragover', handleDragOver);
   on(UI.previewContainer, 'drop', handleDrop);
 
-  // --- 12. 強化版 Waypointダイレクト編集スタジオ（8方向ラベル・ルート吸着・順序変更・ドラッグ移動） ---
+  // --- 12. 強化版 Waypointダイレクト編集スタジオ ---
   function getLabelDirSpec(dirKey) {
     return LABEL_DIRS.find(d => d.key === dirKey) || LABEL_DIRS[0];
   }
@@ -1037,7 +1136,6 @@
         const row = document.createElement('div');
         row.className = wpt.blinking ? 'wpt-row is-blinking' : 'wpt-row';
 
-        // 1. 点滅ON/OFF
         const blinkBtn = document.createElement('button');
         blinkBtn.type = 'button';
         blinkBtn.className = 'wpt-blink-btn';
@@ -1058,7 +1156,6 @@
           syncWaypointSelectUI();
         });
 
-        // 2. ラベル表示ON/OFF
         const visBtn = document.createElement('button');
         visBtn.type = 'button';
         visBtn.className = 'wpt-vis-btn';
@@ -1070,7 +1167,6 @@
           syncWaypointSelectUI();
         });
 
-        // 3. 地名テキスト直接入力
         const nameInput = document.createElement('input');
         nameInput.type = 'text';
         nameInput.className = 'wpt-inline-input';
@@ -1088,7 +1184,6 @@
           if (e.key === 'Enter') nameInput.blur();
         });
 
-        // 4. ラベル引き出し方向切替ボタン（自動 / 8方向）
         const dirBtn = document.createElement('button');
         dirBtn.type = 'button';
         dirBtn.className = 'wpt-dir-btn';
@@ -1101,7 +1196,6 @@
           setStatus(`「${wpt.name}」のラベル表示方向を「${nextSpec.title}」に変更しました。`);
         });
 
-        // 5. 操作ボタン群（最寄りルート吸着 🧲 / 上へ ▲ / 下へ ▼ / 削除 ×）
         const opsDiv = document.createElement('div');
         opsDiv.className = 'wpt-ops';
 
@@ -1212,7 +1306,7 @@
     State.wptDragMode = !State.wptDragMode;
     UI.btnToggleWptDragMode.setAttribute('aria-pressed', String(State.wptDragMode));
     UI.btnToggleWptDragMode.textContent = `✋ピン移動:${State.wptDragMode ? 'ON' : 'OFF'}`;
-    canvas.classList.toggle('wpt-drag-cursor', State.wptDragMode);
+    if (canvas) canvas.classList.toggle('wpt-drag-cursor', State.wptDragMode);
     setStatus(State.wptDragMode
       ? 'Waypointピン移動モードON：キャンバス上の丸ピンをマウスドラッグで直接好きな場所へ移動できます。'
       : '通常の地図移動モードに戻りました（Shift+ドラッグでもピン移動可能です）。');
@@ -1453,7 +1547,7 @@
       seekRatio: clampNumber(an.seekRatio, 0, 1, 0.5),
       seekBlinking: Boolean(an.seekBlinking),
       bgMode: ALLOWED_BG_MODES.includes(an.bgMode) ? an.bgMode : 'transparent',
-      recordSec: Math.round(clampNumber(an.recordSec, 2, 30, 5))
+      recordSec: Math.round(clampNumber(an.recordSec, 2, 60, 5))
     };
 
     let validPhoto = null;
@@ -1551,11 +1645,11 @@
 
     if (sessionToken !== State.loadSessionId) return;
 
-    releasePhotoMemory();
+    releaseMediaMemory();
     if (restoredPhotoCanvas) {
       State.bgBufferCanvas = restoredPhotoCanvas;
       State.bgPhotoName = restoredPhotoName;
-      if (UI.btnClearPhoto) UI.btnClearPhoto.disabled = false;
+      if (UI.btnClearMedia) UI.btnClearMedia.disabled = false;
     }
 
     State.gpxFileName = validated.gpxFileName;
@@ -1617,7 +1711,7 @@
     e.target.value = '';
   });
 
-  // --- 14. 外部サンプルGPX (sample_routegpx.gpx) 読込＆不在時待機（起動時の背景プレートOFF固定） ---
+  // --- 14. 外部サンプルGPX (sample_routegpx.gpx) 初期読込＆不在時待機（背景プレートOFF固定） ---
   function resetToEmptyWaitingState() {
     State.gpxFileName = '';
     State.originalPoints = [];
@@ -1640,7 +1734,7 @@
       UI.btnToggleSeekBlink.textContent = '⚡点滅:OFF';
     }
     closeFloatingAddBar(false);
-    ctx.clearRect(0, 0, CONFIG.CANVAS_W, CONFIG.CANVAS_H);
+    if (ctx) ctx.clearRect(0, 0, CONFIG.CANVAS_W, CONFIG.CANVAS_H);
     applyPreset('br');
     updateReductionUI();
     updateMetaText();
@@ -1672,22 +1766,20 @@
       setStatus(`サンプル山行データ（${CONFIG.SAMPLE_GPX_FILE}）を読み込みました（背景プレート: OFF）。`);
     } catch (_) {
       if (State.trackPoints.length === 0) resetToEmptyWaitingState();
-      setStatus('GPXファイル（または保存したプロジェクト .json）をドロップまたは選択して読み込んでください。', false);
+      setStatus('GPXファイル・背景写真・背景動画・保存プロジェクト(.json)をドロップまたは選択してください。', false);
     }
   }
 
-  on(UI.btnSample, 'click', loadSampleMountainData);
   on(UI.btnResetAll, 'click', () => {
     if (State.isRecording) return;
-    releasePhotoMemory();
+    releaseMediaMemory();
     resetToEmptyWaitingState();
-    if (UI.testBox) UI.testBox.hidden = true;
     loadSampleMountainData();
   });
 
-  on(UI.btnClearPhoto, 'click', () => {
-    releasePhotoMemory();
-    setStatus('背景写真を解除し、メモリを解放しました。');
+  on(UI.btnClearMedia, 'click', () => {
+    releaseMediaMemory();
+    setStatus('背景素材（写真/動画）を解除し、メモリを解放しました。');
   });
 
   // --- 15. カラースウォッチ＆数値スピンボックス双方向バインディング ---
@@ -1773,7 +1865,7 @@
   bindRangeAndNumber(UI.fontSizeRange, UI.fontSizeNum, 11, 38);
   bindRangeAndNumber(UI.animSpeedRange, UI.animSpeedNum, 0.5, 5.0);
   bindRangeAndNumber(UI.markerSizeRange, UI.markerSizeNum, 5, 26);
-  bindRangeAndNumber(UI.recordSecRange, UI.recordSecNum, 2, 30, () => {
+  bindRangeAndNumber(UI.recordSecRange, UI.recordSecNum, 2, 60, () => {
     if (UI.secBadge && UI.recordSecRange) UI.secBadge.textContent = `${UI.recordSecRange.value}秒`;
   });
 
@@ -1791,12 +1883,19 @@
     State.showGuide = !State.showGuide;
     UI.btnToggleGuide.setAttribute('aria-pressed', String(State.showGuide));
     UI.btnToggleGuide.textContent = `📏 セーフティ枠: ${State.showGuide ? 'ON' : 'OFF'}`;
-    if (UI.safetyGuideOverlay) UI.safetyGuideOverlay.hidden = !State.showGuide || State.trackPoints.length === 0;
+    const hasContent = State.trackPoints.length > 0 || State.bgBufferCanvas || State.bgVideoEl;
+    if (UI.safetyGuideOverlay) UI.safetyGuideOverlay.hidden = !State.showGuide || !hasContent;
   });
 
   on(UI.btnResetAnim, 'click', () => {
     State.animStartTime = performance.now();
-    setStatus('アニメーション周期を先頭（0秒）にリセットしました。');
+    if (State.bgVideoEl) {
+      try {
+        State.bgVideoEl.currentTime = 0;
+        State.bgVideoEl.play().catch(() => {});
+      } catch (_) {}
+    }
+    setStatus('アニメーション周期および背景動画を先頭（0秒）にリセットしました。');
   });
 
   on(UI.routeSeekRange, 'input', (e) => {
@@ -1836,9 +1935,6 @@
     };
   }
 
-  /**
-   * キャンバス上の座標 (cx, cy) 付近にあるWaypointを検索する（ヒット判定半径 24px）
-   */
   function hitTestWaypoint(cx, cy) {
     let closest = null;
     let minDist = 24;
@@ -1858,7 +1954,6 @@
     if (e.button !== 0 && e.pointerType === 'mouse') return;
     const pt = getCanvasCoords(e.clientX, e.clientY);
 
-    // ピン移動モードON または Shiftキー押下時は、Waypointピンのドラッグ移動を優先判定
     if (State.wptDragMode || e.shiftKey) {
       const hitWpt = hitTestWaypoint(pt.x, pt.y);
       if (hitWpt) {
@@ -1939,7 +2034,7 @@
     else if (e.key === 'p' || e.key === 'P') { e.preventDefault(); setPlateState(!State.showPlate); }
   });
 
-  // --- 17. クロマキー対応＆8方向ラベル引き出し線付きレンダリングエンジン ---
+  // --- 17. クロマキー対応・背景動画合成・8方向ラベル付きレンダリングエンジン ---
   function drawRoundedRect(context, x, y, w, h, r) {
     context.beginPath();
     if (typeof context.roundRect === 'function') {
@@ -2021,26 +2116,35 @@
   }
 
   function renderScene(timestamp) {
+    if (!ctx) return;
     const tp = State.trackPoints;
-    if (tp.length === 0) return;
+    const hasBgMedia = Boolean(State.bgBufferCanvas || State.bgVideoEl);
+    if (tp.length === 0 && !hasBgMedia) return;
 
     const elapsed = (timestamp - State.animStartTime) / 1000;
     const bgMode = UI.bgModeSelect?.value || 'transparent';
-    const isChromaKey = !State.bgBufferCanvas && (bgMode === 'green' || bgMode === 'blue');
+    const isChromaKey = !hasBgMedia && (bgMode === 'green' || bgMode === 'blue');
     const isUnshieldedChroma = isChromaKey && !State.showPlate;
 
     ctx.clearRect(0, 0, CONFIG.CANVAS_W, CONFIG.CANVAS_H);
 
-    if (State.bgBufferCanvas) {
+    // 1. 背景レイヤー描画（背景動画 ➔ 背景写真 ➔ 単色/透過）
+    if (State.bgVideoEl && State.bgVideoEl.readyState >= 2) {
+      drawVideoCover(ctx, State.bgVideoEl, CONFIG.CANVAS_W, CONFIG.CANVAS_H);
+    } else if (State.bgBufferCanvas) {
       ctx.drawImage(State.bgBufferCanvas, 0, 0);
     } else if (bgMode === 'green') {
       ctx.fillStyle = '#00FF00'; ctx.fillRect(0, 0, CONFIG.CANVAS_W, CONFIG.CANVAS_H);
     } else if (bgMode === 'blue') {
       ctx.fillStyle = '#0000FF'; ctx.fillRect(0, 0, CONFIG.CANVAS_W, CONFIG.CANVAS_H);
-    } else if (bgMode === 'black') {
+    } else if (bgMode === 'black' || (State.isRecording && State.recordingFormat === 'mp4' && bgMode === 'transparent')) {
+      // MP4形式はアルファチャンネル非対応のため、背景素材なしの透過モード時は黒背景でクリーンに出力する
       ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, CONFIG.CANVAS_W, CONFIG.CANVAS_H);
     }
 
+    if (tp.length === 0) return;
+
+    // 2. ミニマップ座布団プレート
     if (State.showPlate === true) {
       const pad = 420 * State.view.scale;
       ctx.save();
@@ -2052,6 +2156,7 @@
       ctx.restore();
     }
 
+    // 3. 登山ルート線画
     const lineWidth = parseFloat(UI.lineWidthRange?.value) || 5;
     const animType = UI.animTypeSelect?.value || 'pulse';
     const speed = parseFloat(UI.animSpeedRange?.value) || 2.0;
@@ -2097,7 +2202,7 @@
     ctx.stroke();
     ctx.restore();
 
-    // Waypointピン＆8方向対応ラベル描画
+    // 4. Waypointピン＆8方向対応ラベル描画
     const fontSize = parseInt(UI.fontSizeRange?.value, 10) || 20;
     const wp = State.waypoints;
     ctx.save();
@@ -2108,7 +2213,6 @@
       const pt = projectToMain(wpt.lat, wpt.lon);
       const pinRadius = Math.max(4.5, lineWidth * 0.78);
 
-      // 丸ピン描画
       ctx.fillStyle = '#ffffff';
       ctx.strokeStyle = '#000000';
       ctx.lineWidth = 3;
@@ -2123,7 +2227,6 @@
       let dx = dirSpec.dx;
       let dy = dirSpec.dy;
 
-      // 自動配置時はマップ中心から外側へ向かう方向を選ぶ
       if (dirSpec.key === 'auto') {
         dx = pt.x >= State.view.offsetX ? 1 : -1;
         dy = 0;
@@ -2133,7 +2236,6 @@
       const tx = pt.x + dx * dist;
       const ty = pt.y + dy * dist;
 
-      // 方向オフセット時は短い引き出し線を描画して対応関係を明確化
       if (dirSpec.key !== 'auto' && dirSpec.key !== 'E') {
         ctx.beginPath();
         ctx.moveTo(pt.x + dx * pinRadius, pt.y + dy * pinRadius);
@@ -2158,6 +2260,7 @@
     }
     ctx.restore();
 
+    // 5. 点滅マーカー描画
     const markerSize = parseFloat(UI.markerSizeRange?.value) || 10;
     if (animType === 'progress' && progressHead) {
       const pt = projectToMain(progressHead.lat, progressHead.lon);
@@ -2188,16 +2291,36 @@
     if (State.isPageVisible && !State.rafId) State.rafId = requestAnimationFrame(loop);
   });
 
-  // --- 18. 動画＆静止画エクスポート ---
-  function getSupportedVideoMime() {
-    const list = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'];
-    for (const m of list) {
-      if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)) return m;
+  // --- 18. WebM (.webm) ＆ MP4 (.mp4) 2系統動画書き出しエンジン ---
+  function getSupportedMimeForFormat(targetFormat) {
+    if (typeof MediaRecorder === 'undefined') return '';
+    if (targetFormat === 'mp4') {
+      const mp4Candidates = [
+        'video/mp4;codecs=avc1.640028',
+        'video/mp4;codecs=avc1.42E01E',
+        'video/mp4;codecs=avc1',
+        'video/mp4;codecs=h264',
+        'video/mp4;codecs=hevc',
+        'video/mp4'
+      ];
+      for (const m of mp4Candidates) {
+        if (MediaRecorder.isTypeSupported(m)) return m;
+      }
+      return '';
+    } else {
+      const webmCandidates = [
+        'video/webm;codecs=vp9',
+        'video/webm;codecs=vp8',
+        'video/webm'
+      ];
+      for (const m of webmCandidates) {
+        if (MediaRecorder.isTypeSupported(m)) return m;
+      }
+      return '';
     }
-    return '';
   }
 
-  function startOrStopVideoExport() {
+  function startOrStopVideoExport(requestedFormat) {
     if (State.isRecording && State.mediaRecorder) {
       State.mediaRecorder.stop();
       return;
@@ -2206,19 +2329,35 @@
       setStatus('先にGPXファイルをドロップまたは選択して読み込んでください。', true);
       return;
     }
-    const mimeType = getSupportedVideoMime();
+
+    const format = requestedFormat === 'mp4' ? 'mp4' : 'webm';
+    let mimeType = getSupportedMimeForFormat(format);
+
     if (!mimeType) {
-      setStatus('お使いのブラウザはCanvas動画録画機能に対応していません。', true);
+      if (format === 'mp4') {
+        setStatus('お使いのブラウザはMP4直接録画に未対応です。最新のChrome / Edge / Safariをご利用いただくか、WebM形式で書き出してください。', true);
+      } else {
+        setStatus('お使いのブラウザはWebM録画に未対応です。MP4形式で書き出してください。', true);
+      }
       return;
     }
 
-    const sec = Math.min(30, Math.max(2, parseInt(UI.recordSecRange?.value, 10) || 5));
+    const sec = Math.min(60, Math.max(2, parseInt(UI.recordSecRange?.value, 10) || 5));
 
     try {
+      // 背景動画がある場合は先頭（0秒）から同期再生を開始
+      if (State.bgVideoEl) {
+        try {
+          State.bgVideoEl.currentTime = 0;
+          State.bgVideoEl.play().catch(() => {});
+        } catch (_) {}
+      }
+
       const stream = canvas.captureStream(CONFIG.FPS);
       State.activeStream = stream;
       const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: CONFIG.VIDEO_BITRATE });
       State.mediaRecorder = recorder;
+      State.recordingFormat = format;
       const chunks = [];
 
       recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data); };
@@ -2229,10 +2368,9 @@
       recorder.onstop = () => {
         releaseRecordingMemory();
         if (chunks.length === 0) return;
-        const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
         const blob = new Blob(chunks, { type: mimeType });
-        triggerBlobDownload(blob, `gpx_route_${Date.now()}.${ext}`);
-        setStatus(`合成用動画（${sec}秒・12Mbps）の書き出しが完了しました。`);
+        triggerBlobDownload(blob, `gpx_route_${Date.now()}.${format}`);
+        setStatus(`${format.toUpperCase()}動画（${sec}秒・12Mbps）の書き出しが完了しました。`);
       };
 
       State.animStartTime = performance.now();
@@ -2241,11 +2379,18 @@
       if (UI.fileInput) UI.fileInput.disabled = true;
       if (UI.btnSaveProject) UI.btnSaveProject.disabled = true;
       if (UI.btnLoadProject) UI.btnLoadProject.disabled = true;
-      if (UI.btnExportVideo) UI.btnExportVideo.textContent = '⏹ 録画停止して保存';
-      if (UI.btnExportVideoSide) UI.btnExportVideoSide.textContent = '⏹ 録画停止して今すぐ保存';
+
+      const stopLabel = `⏹ 停止して${format.toUpperCase()}保存`;
+      if (format === 'mp4') {
+        if (UI.btnExportMp4) UI.btnExportMp4.textContent = stopLabel;
+        if (UI.btnExportMp4Side) UI.btnExportMp4Side.textContent = stopLabel;
+      } else {
+        if (UI.btnExportWebm) UI.btnExportWebm.textContent = stopLabel;
+        if (UI.btnExportWebmSide) UI.btnExportWebmSide.textContent = stopLabel;
+      }
 
       recorder.start(200);
-      setStatus(`🔴 録画中（${sec}秒間）... 再クリックすると即時保存します。`);
+      setStatus(`🔴 ${format.toUpperCase()}録画中（${sec}秒間）... 再クリックすると即時保存します。`);
 
       State.recordTimer = setTimeout(() => {
         if (State.isRecording && State.mediaRecorder && State.mediaRecorder.state === 'recording') {
@@ -2259,8 +2404,8 @@
   }
 
   function exportPngSnapshot() {
-    if (State.trackPoints.length < 2) {
-      setStatus('先にGPXファイルをドロップまたは選択して読み込んでください。', true);
+    if (State.trackPoints.length < 2 && !State.bgBufferCanvas && !State.bgVideoEl) {
+      setStatus('先にGPXファイルまたは背景素材を読み込んでください。', true);
       return;
     }
     canvas.toBlob((blob) => {
@@ -2270,94 +2415,41 @@
     }, 'image/png');
   }
 
-  on(UI.btnExportVideo, 'click', startOrStopVideoExport);
-  on(UI.btnExportVideoSide, 'click', startOrStopVideoExport);
+  on(UI.btnExportWebm, 'click', () => startOrStopVideoExport('webm'));
+  on(UI.btnExportWebmSide, 'click', () => startOrStopVideoExport('webm'));
+  on(UI.btnExportMp4, 'click', () => startOrStopVideoExport('mp4'));
+  on(UI.btnExportMp4Side, 'click', () => startOrStopVideoExport('mp4'));
   on(UI.btnExportPng, 'click', exportPngSnapshot);
   on(UI.btnExportPngSide, 'click', exportPngSnapshot);
 
-  // --- 19. 自己診断テストスイート (全8項目) ---
-  on(UI.btnSelfTest, 'click', () => {
-    if (!UI.testBox) return;
-    if (!UI.testBox.hidden) {
-      UI.testBox.hidden = true;
-      return;
-    }
-    const logs = [];
-    const assert = (name, cond) => logs.push(`${cond ? '✅ PASS' : '❌ FAIL'}: ${name}`);
-
-    // Test 1: 重要度ランキング式RDPと5段階削減（10%〜50%）の精度＆Waypointアンカー保護検証
-    const dummy1000 = Array.from({ length: 1000 }, (_, i) => ({
-      lat: 35.0 + i * 0.0001,
-      lon: 135.0 + Math.sin(i * 0.08) * 0.002
-    }));
-    const anchorWpt = [{ lat: dummy1000[333].lat, lon: dummy1000[333].lon }];
-    const scores = computePointImportanceScores(dummy1000, anchorWpt);
-    const red10 = extractReducedTrack(dummy1000, scores, 10).points;
-    const red30 = extractReducedTrack(dummy1000, scores, 30).points;
-    const red50 = extractReducedTrack(dummy1000, scores, 50).points;
-    const anchorPreserved = red50.some(p => p.lat === dummy1000[333].lat && p.lon === dummy1000[333].lon);
-    assert(
-      `5段階GPXポイント削減 (-10%=${red10.length}pts, -30%=${red30.length}pts, -50%=${red50.length}pts, アンカー保持=${anchorPreserved})`,
-      red10.length === 900 && red30.length === 700 && red50.length === 500 && anchorPreserved
-    );
-
-    // Test 2: 累積距離二分探索＆線形補間 (Lerp)
-    const midInterp = getPointAtDistanceRatio(0.5);
-    assert('累積距離二分探索 & 線形補間 (Lerp)', Number.isFinite(midInterp.lat) && Number.isFinite(midInterp.lon));
-
-    // Test 3: 座標投影 <-> 逆投影の往復精度
-    const origLat = 34.7770, origLon = 135.2637;
-    const p = projectToMain(origLat, origLon);
-    const back = unprojectFromMain(p.x, p.y);
-    const err = Math.hypot(origLat - back.lat, origLon - back.lon);
-    assert(`座標投影 <-> 逆投影の往復精度 (${err.toExponential(2)})`, err < 1e-6);
-
-    // Test 4: Waypointルート吸着（スナップ）精度検証
-    const snapped = findNearestTrackPoint(34.7775, 135.2640);
-    assert('Waypoint最寄りルート吸着 (Snap-to-Route) 計算確認', Number.isFinite(snapped.lat) && Number.isFinite(snapped.lon));
-
-    // Test 5: XXE / Billion Laughs 防御フィルタ検証
-    let xxeBlocked = false;
-    try { sanitizeXmlString('<?xml version="1.0"?><!DOCTYPE lolz [<!ENTITY lol "lol">]><gpx></gpx>'); }
-    catch (_) { xxeBlocked = true; }
-    assert('XXE / Billion Laughs 遮断確認', xxeBlocked);
-
-    // Test 6: DOM XSSサニタイズ確認
-    const testOpt = document.createElement('option');
-    testOpt.textContent = '<img src=x onerror=alert(1)>';
-    assert('DOM XSS無害化確認', testOpt.innerHTML.includes('&lt;img'));
-
-    // Test 7: プロジェクトJSON検証・初期プレートOFF検証・Prototype Pollution防御
-    let projectTestPassed = false;
-    try {
-      const mockProject = {
-        magic: CONFIG.PROJECT_MAGIC, version: 2, '__proto__': { polluted: true },
-        route: { gpxFileName: 't.gpx', reductionPercent: 30, trackPoints: [{ lat: 34.7, lon: 135.2 }, { lat: 34.8, lon: 135.3 }], waypoints: [] },
-        view: { offsetX: 999999, offsetY: -999999, scale: 99 },
-        style: { lineColor: '#529e78', markerColor: 'invalid' }
-      };
-      const val = parseAndValidateProjectJson(JSON.stringify(mockProject));
-      projectTestPassed = val.view.scale === 3.0 && val.route !== undefined || (val.reductionPercent === 30 && val.style.showPlate === false && !({}).polluted);
-    } catch (_) { projectTestPassed = false; }
-    assert('プロジェクトJSON検証・削減率保持・Prototype Pollution防御', projectTestPassed);
-
-    // Test 8: MediaRecorder対応確認
-    const mime = getSupportedVideoMime();
-    assert(`MediaRecorder 高ビットレート録画 (${mime || '未対応'})`, Boolean(mime));
-
-    UI.testBox.textContent = `[Workstation 診断レポート - ${new Date().toLocaleTimeString()}]\n` + logs.join('\n');
-    UI.testBox.hidden = false;
-    setStatus('自己診断テスト（全8項目）を完了しました。右ペイン下部のレポートをご確認ください。');
-  });
-
   on(window, 'pagehide', () => {
     if (State.rafId) cancelAnimationFrame(State.rafId);
-    releasePhotoMemory();
+    releaseMediaMemory();
     releaseRecordingMemory();
   });
 
+  // --- 19. 独立診断テストファイル (test.html / test.js) 向けの読み取り専用テストAPI公開 ---
+  window.GPXStudioEngine = Object.freeze({
+    CONFIG,
+    computePointImportanceScores,
+    extractReducedTrack,
+    getPointAtDistanceRatio,
+    findNearestTrackPoint,
+    projectToMain,
+    unprojectFromMain,
+    sanitizeXmlString,
+    parseAndValidateProjectJson,
+    getSupportedMimeForFormat,
+    getStateSnapshot: () => ({
+      trackPointsCount: State.trackPoints.length,
+      showPlate: State.showPlate
+    })
+  });
+
   // --- 初期起動（起動直後に確実に背景プレートOFFを強制適用） ---
-  setPlateState(false);
-  loadSampleMountainData();
-  State.rafId = requestAnimationFrame(loop);
+  if (canvas && ctx) {
+    setPlateState(false);
+    loadSampleMountainData();
+    State.rafId = requestAnimationFrame(loop);
+  }
 })();
