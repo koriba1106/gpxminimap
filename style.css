@@ -883,16 +883,21 @@ canvas:focus-visible,
 }
 
 .test-box {
-  padding: 8px;
-  border-radius: 4px;
+  padding: 12px;
+  border-radius: 6px;
   background: #141f19;
   color: #a8e6cf;
-  font-size: 11px;
-  max-height: 150px;
+  font-size: 12.5px;
+  line-height: 1.55;
   overflow-y: auto;
   white-space: pre-wrap;
   margin: 0;
+  user-select: text;
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.test-box-large {
+  min-height: 360px;
 }
 
 .privacy-box {
@@ -950,4 +955,23 @@ canvas:focus-visible,
   color: var(--danger);
   text-align: center;
   font-weight: 700;
+}
+
+/* -------------------- 独立診断ページ (test.html) 用レイアウト -------------------- */
+.test-page-body {
+  overflow-y: auto;
+  height: auto;
+}
+
+.test-runner-container {
+  max-width: 960px;
+  margin: 24px auto;
+  padding: 0 16px;
+  display: grid;
+  gap: 16px;
+}
+
+.test-runner-main {
+  display: grid;
+  gap: 16px;
 }
