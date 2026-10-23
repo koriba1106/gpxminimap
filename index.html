@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src blob: data:; media-src blob:; connect-src 'self'; base-uri 'none'; form-action 'none';">
-  <title>GPXから透過マップ動画作製</title>
+  <title>GPX Route Studio</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -16,69 +16,66 @@
 
   <!-- フルスクリーン・ドラッグ＆ドロップオーバーレイ -->
   <div id="dropOverlay" class="drop-overlay" hidden>
-    <div class="drop-Overlay-box">
+    <div class="drop-overlay-box">
       <strong>📂 ファイルをドロップして読み込み</strong>
       <span>GPXログ (.gpx) ／ 背景写真 (.jpg, .png, .webp) ／ プロジェクト (.json)</span>
     </div>
   </div>
 
-  <!-- デスクトップ・ワークステーション ルートコンテナ -->
+  <!-- メインワークステーション -->
   <div id="appRoot" class="workstation">
 
-    <!-- ==================== 上部：グローバルコマンドバー ==================== -->
+    <!-- ==================== 上部：スリムコマンドバー ==================== -->
     <header class="topbar">
       <div class="topbar-left">
         <div class="brand">
           <div class="mark" aria-hidden="true">⛰</div>
           <span class="brand-name">GPX Route Studio</span>
-          <span class="brand-sub">WORKSTATION</span>
         </div>
 
         <div class="divider-v"></div>
 
-        <!-- ファイル操作ツールバー -->
-        <div class="toolbar-group" role="group" aria-label="ファイル操作">
-          <label id="fileZone" class="btn btn-toolbar" tabindex="0" title="GPX・背景写真・プロジェクトJSONを選択（画面への直接ドロップも可）">
-            <span>📂 素材を開く...</span>
+        <div class="toolbar-group">
+          <label id="fileZone" class="btn btn-ghost" tabindex="0" title="GPX・背景写真・プロジェクトJSONを選択（画面への直接ドロップも可）">
+            <span>📂 素材を開く</span>
             <input type="file" id="fileInput" accept=".gpx,application/gpx+xml,text/xml,image/jpeg,image/png,image/webp,.json,application/json" multiple>
           </label>
-          <button type="button" id="btnSample" class="btn btn-toolbar" title="sample_routegpx.gpx を読み込みます">サンプル読込</button>
-          <button type="button" id="btnClearPhoto" class="btn btn-toolbar" disabled title="読み込んだ背景写真を破棄してメモリを解放します">写真解除</button>
+          <button type="button" id="btnSample" class="btn btn-ghost" title="sample_routegpx.gpx を読み込みます">サンプル</button>
+          <button type="button" id="btnClearPhoto" class="btn btn-ghost" disabled title="背景写真を解除します">写真解除</button>
         </div>
 
         <div class="divider-v"></div>
 
-        <!-- プロジェクト管理ツールバー -->
-        <div class="toolbar-group" role="group" aria-label="プロジェクト管理">
-          <button type="button" id="btnSaveProject" class="btn btn-toolbar" title="現在の編集状態をJSONファイルに保存します">💾 保存(.json)</button>
-          <button type="button" id="btnLoadProject" class="btn btn-toolbar" title="保存したプロジェクトJSONを読み込みます">📁 再開(.json)</button>
+        <div class="toolbar-group">
+          <button type="button" id="btnSaveProject" class="btn btn-ghost" title="編集状態をJSON保存">💾 保存</button>
+          <button type="button" id="btnLoadProject" class="btn btn-ghost" title="プロジェクトJSONを読込">📁 読込</button>
           <input type="file" id="projectInput" accept=".json,application/json" hidden>
-          <button type="button" id="btnResetAll" class="btn btn-toolbar" title="初期状態にリセットします">初期化</button>
+          <button type="button" id="btnResetAll" class="btn btn-ghost" title="初期状態にリセット">リセット</button>
         </div>
       </div>
 
-      <!-- 右端：診断・ガイド＆エクスポート実行ドック -->
       <div class="topbar-right">
-        <button type="button" id="btnSelfTest" class="btn btn-toolbar" title="システムの自己診断テストを実行します">診断テスト</button>
-        <a href="guide.html" class="btn btn-toolbar link-btn" title="動画編集ソフト別の合成ガイドを開きます">📖 合成ガイド</a>
+        <button type="button" id="btnSelfTest" class="btn btn-ghost" title="自己診断テスト">診断</button>
+        <a href="guide.html" class="btn btn-ghost" title="動画編集ソフト別の合成ガイド">📖 ガイド</a>
         <div class="divider-v"></div>
-        <button type="button" id="btnExportPng" class="btn btn-secondary" title="現在のフレームを1920x1080のPNG静止画として保存します">📷 静止画書き出し (.png)</button>
-        <button type="button" id="btnExportVideo" class="btn btn-primary" title="設定した秒数の合成用アニメーション動画を書き出します">🎬 動画書き出し (.webm)</button>
+        <button type="button" id="btnExportPng" class="btn btn-secondary">📷 静止画保存 (.png)</button>
+        <button type="button" id="btnExportVideo" class="btn btn-primary">🎬 動画書き出し (.webm)</button>
       </div>
     </header>
 
     <!-- ==================== 中央：3ペイン・メインワークスペース ==================== -->
     <main class="workspace-grid">
 
-      <!-- 【左ドック】Waypointダイレクト管理 ＆ 配置プリセット -->
-      <aside class="dock dock-left" aria-label="Waypoint管理と配置プリセット">
+      <!-- 【左ペイン】配置プリセット ＆ Waypoint管理 -->
+      <aside class="side-pane pane-left" aria-label="配置とWaypoint管理">
 
-        <!-- セクションA: 配置プリセットサムネイル (5種) -->
-        <section class="dock-section">
-          <div class="section-header">
-            <h2>1. 表示位置プリセット</h2>
-            <span id="zoomBadge" class="badge">55%</span>
+        <!-- 1. 配置プリセット -->
+        <section class="pane-section">
+          <div class="section-title-row">
+            <h2>表示位置・スケール</h2>
+            <span id="zoomBadge" class="val-badge" hidden>55%</span>
           </div>
+
           <div class="thumbs" id="presetThumbs" role="group" aria-label="表示位置プリセット">
             <button type="button" class="thumb" data-preset="full" title="全画面（中央配置）">
               <canvas width="160" height="90"></canvas>
@@ -86,275 +83,81 @@
             </button>
             <button type="button" class="thumb" data-preset="br" title="右下ミニマップ">
               <canvas width="160" height="90"></canvas>
-              <span>右下隅</span>
+              <span>右下</span>
             </button>
             <button type="button" class="thumb" data-preset="bl" title="左下ミニマップ">
               <canvas width="160" height="90"></canvas>
-              <span>左下隅</span>
+              <span>左下</span>
             </button>
             <button type="button" class="thumb" data-preset="tr" title="右上ミニマップ">
               <canvas width="160" height="90"></canvas>
-              <span>右上隅</span>
+              <span>右上</span>
             </button>
             <button type="button" class="thumb" data-preset="tl" title="左上ミニマップ">
               <canvas width="160" height="90"></canvas>
-              <span>左上隅</span>
+              <span>左上</span>
             </button>
           </div>
 
-          <div class="control-row">
-            <label for="zoomRange">スケール</label>
+          <div class="slider-row">
+            <label for="zoomRange">拡大率 (%)</label>
             <input type="range" id="zoomRange" min="0.15" max="3.0" step="0.01" value="0.55">
-            <input type="number" id="zoomNum" class="num-input" min="15" max="300" step="1" value="55" aria-label="拡大率パーセント">
-            <span class="unit">%</span>
+            <input type="number" id="zoomNum" class="num-box" min="15" max="300" step="1" value="55">
           </div>
         </section>
 
-        <!-- セクションB: Waypointダイレクト編集テーブル（プルダウン不要の直接操作） -->
-        <section class="dock-section dock-section-grow">
-          <div class="section-header">
-            <h2>2. Waypoint（地名・点滅）一覧</h2>
-            <span id="blinkCountBadge" class="badge">点滅: 1箇所</span>
+        <!-- 2. Waypointリスト -->
+        <section class="pane-section section-grow">
+          <div class="section-title-row">
+            <h2>Waypoint（地名・点滅）</h2>
+            <div class="inline-actions">
+              <button type="button" id="btnBlinkAllOn" class="btn-link">全点滅</button>
+              <button type="button" id="btnBlinkAllOff" class="btn-link">全解除</button>
+              <button type="button" id="btnLabelAllToggle" class="btn-link">表示切替</button>
+            </div>
+            <span id="blinkCountBadge" hidden>1</span>
           </div>
 
-          <div class="table-toolbar">
-            <button type="button" id="btnBlinkAllOn" class="btn btn-xs">⚡ 全点滅ON</button>
-            <button type="button" id="btnBlinkAllOff" class="btn btn-xs">⚪ 全点滅OFF</button>
-            <button type="button" id="btnLabelAllToggle" class="btn btn-xs">👁 地名一括切替</button>
-          </div>
-
-          <!-- Waypointテーブルヘッダー -->
-          <div class="wpt-table-head">
-            <span class="col-blink" title="点滅アニメーションのON/OFF">点滅</span>
-            <span class="col-vis" title="日本語ラベル表示のON/OFF">表示</span>
-            <span class="col-name">日本語地名（直接編集可）</span>
-            <span class="col-del">削除</span>
-          </div>
-
-          <!-- Waypointスクロールリスト本体 -->
-          <div id="wptTableBody" class="wpt-table-body" role="region" aria-label="Waypoint直接編集リスト"></div>
-
-          <!-- 互換用隠しセレクト（テスト＆内部同期用） -->
+          <div id="wptTableBody" class="wpt-list" role="region" aria-label="Waypointリスト"></div>
           <select id="wptSelect" hidden></select>
         </section>
 
-        <!-- セクションC: 距離比例シーク ＆ 新規地点追加 -->
-        <section class="dock-section">
-          <div class="section-header">
-            <h2>3. ルート距離比例シーク＆地点追加</h2>
-            <span id="seekBadge" class="badge">50%地点</span>
+        <!-- 3. ルートシーク＆地点追加 -->
+        <section class="pane-section">
+          <div class="section-title-row">
+            <h2>ルート位置シーク・追加</h2>
+            <span id="seekBadge" class="val-badge">50%</span>
           </div>
-          <div class="control-row">
-            <input type="range" id="routeSeekRange" min="0" max="1000" value="500" title="ルート上の位置を距離比例で移動します">
+
+          <input type="range" id="routeSeekRange" min="0" max="1000" value="500" title="ルート上の位置を移動">
+
+          <div class="row-gap">
+            <button type="button" id="btnToggleSeekBlink" class="btn btn-sm btn-full" aria-pressed="false">シーク位置を点滅: OFF</button>
           </div>
-          <div class="control-row">
-            <button type="button" id="btnToggleSeekBlink" class="btn btn-sm btn-block" aria-pressed="false">⚡ シーク位置を点滅: OFF</button>
-          </div>
-          <div class="control-row">
-            <input type="text" id="newSeekWptInput" class="text-input" maxlength="40" placeholder="追加する地名 (例: 槍ヶ岳山荘)">
-            <button type="button" id="btnAddWptAtSeek" class="btn btn-sm btn-secondary">＋ シーク位置に追加</button>
+
+          <div class="input-group">
+            <input type="text" id="newSeekWptInput" class="text-box" maxlength="40" placeholder="地名を入力して追加...">
+            <button type="button" id="btnAddWptAtSeek" class="btn btn-sm btn-secondary">＋ 追加</button>
           </div>
         </section>
 
       </aside>
 
-      <!-- 【中央ペイン】16:9 メインビューポート＆ビューワー制御 -->
-      <section class="viewport-pane" aria-label="メインプレビュービューポート">
+      <!-- 【中央ペイン】16:9 プレビュービューポート -->
+      <section class="viewport-pane" aria-label="プレビュー">
 
-        <!-- ビューポート上部情報バー -->
         <div class="viewport-bar">
           <div class="viewport-meta">
-            <span id="pointBadge" class="badge">0 pts</span>
-            <span id="metaInfo" class="meta-text">ファイルを読み込んでください</span>
+            <span id="pointBadge" class="meta-pill">0 pts</span>
+            <span id="metaInfo" class="meta-text">GPXファイルをドロップしてください</span>
           </div>
           <div class="viewport-tools">
-            <button type="button" id="btnToggleGuide" class="btn btn-xs" aria-pressed="true" title="動画編集時の配置確認用16:9セーフティ枠を表示します（書き出し時は自動で消えます）[ショートカット: G]">📏 セーフティ枠: ON</button>
-            <button type="button" id="btnResetAnim" class="btn btn-xs" title="アニメーション周期を先頭(0秒)にリセットします [ショートカット: Space]">⏮ アニメ先頭へ</button>
+            <button type="button" id="btnToggleGuide" class="btn btn-xs" aria-pressed="false" title="16:9セーフティ枠の表示切替 [G]">ガイド枠: OFF</button>
+            <button type="button" id="btnResetAnim" class="btn btn-xs" title="アニメーションを0秒へリセット [Space]">⏮ 先頭再生</button>
           </div>
         </div>
 
-        <!-- 16:9 キャンバスステージ -->
         <div class="preview" id="previewContainer">
           <div id="emptyState" class="empty">
-            <strong>GPXファイルが読み込まれていません</strong>
-            <span>画面のどこかに <b>.gpx ファイル</b>（または保存したプロジェクト <b>.json</b>）をドラッグ＆ドロップするか、<br>上部ツールバーの「📂 素材を開く」「サンプル読込」をクリックしてください。</span>
-          </div>
-          <canvas id="mainCanvas" width="1920" height="1080" tabindex="0" aria-label="登山ルートアニメーションプレビュー" hidden></canvas>
-          <!-- セーフティガイドオーバーレイ（録画データには一切写り込まないDOMレイヤー） -->
-          <div id="safetyGuideOverlay" class="safety-guide" aria-hidden="true">
-            <div class="guide-action-safe">
-              <span class="guide-label">90% Action Safe (1920×1080)</span>
-            </div>
-            <div class="guide-title-safe">
-              <span class="guide-label">80% Title / YouTube UI Safe</span>
-            </div>
-            <div class="guide-crosshair-h"></div>
-            <div class="guide-crosshair-v"></div>
-          </div>
-        </div>
-
-        <!-- ダブルクリック時の非ブロッキング地点追加バー -->
-        <div id="wptEditorPanel" class="floating-editor" hidden>
-          <label for="wptNameInput" id="wptEditorTitle">ダブルクリック地点にWaypointを追加:</label>
-          <input type="text" id="wptNameInput" class="text-input" maxlength="40" placeholder="例: 穂高岳山荘">
-          <button type="button" id="btnSaveWptName" class="btn btn-sm btn-primary">確定 (Enter)</button>
-          <button type="button" id="btnCancelWptName" class="btn btn-sm">キャンセル (Esc)</button>
-        </div>
-
-      </section>
-
-      <!-- 【右ドック】スタイル・アニメーション・クロマキー合成インスペクター -->
-      <aside class="dock dock-right" aria-label="スタイルおよび動画書き出し設定">
-
-        <!-- セクションD: ルート線画＆ラベル外観 -->
-        <section class="dock-section">
-          <div class="section-header">
-            <h2>4. ルート線画 ＆ 地名スタイル</h2>
-            <span id="lineColorBadge" class="badge">#FFFFFF</span>
-          </div>
-
-          <div class="sub-label">ルート線の色（スウォッチ選択またはカスタム色）</div>
-          <div class="swatch-row" id="lineColorRow" role="radiogroup" aria-label="ルート線の色">
-            <button type="button" class="swatch" data-color="#ffffff" aria-pressed="true" title="ホワイト (#FFFFFF)"></button>
-            <button type="button" class="swatch" data-color="#529e78" aria-pressed="false" title="うぐいす (#529E78)"></button>
-            <button type="button" class="swatch" data-color="#ffd60a" aria-pressed="false" title="イエロー (#FFD60A)"></button>
-            <button type="button" class="swatch" data-color="#ff9f0a" aria-pressed="false" title="オレンジ (#FF9F0A)"></button>
-            <button type="button" class="swatch" data-color="#ff453a" aria-pressed="false" title="レッド (#FF453A)"></button>
-            <button type="button" class="swatch" data-color="#64d2ff" aria-pressed="false" title="スカイブルー (#64D2FF)"></button>
-            <button type="button" class="swatch" data-color="#30d158" aria-pressed="false" title="グリーン (#30D158)"></button>
-            <button type="button" class="swatch" data-color="#bf5af2" aria-pressed="false" title="パープル (#BF5AF2)"></button>
-            <button type="button" class="swatch" data-color="#193326" aria-pressed="false" title="濃緑墨 (#193326)"></button>
-            <input type="color" id="lineCustomColor" class="color-picker" value="#ffffff" title="自由な色を選択">
-          </div>
-
-          <div class="control-row">
-            <label for="lineWidthRange">線の太さ</label>
-            <input type="range" id="lineWidthRange" min="1" max="16" step="0.5" value="5">
-            <input type="number" id="lineWidthNum" class="num-input" min="1" max="16" step="0.5" value="5">
-            <span class="unit">px</span>
-          </div>
-
-          <div class="control-row">
-            <label for="fontSizeRange">地名サイズ</label>
-            <input type="range" id="fontSizeRange" min="11" max="38" step="1" value="20">
-            <input type="number" id="fontSizeNum" class="num-input" min="11" max="38" step="1" value="20">
-            <span class="unit">px</span>
-          </div>
-
-          <div class="button-pair">
-            <button type="button" id="btnTogglePlate" class="btn btn-sm" aria-pressed="true" title="ミニマップ背後の座布団プレート表示切替 [ショートカット: P]">背景プレート: ON</button>
-            <button type="button" id="btnToggleOutline" class="btn btn-sm" aria-pressed="true" title="ルート線と文字の黒フチ取り表示切替">黒フチ取り: ON</button>
-          </div>
-          <span id="sizeBadge" hidden>5px / 20px</span>
-        </section>
-
-        <!-- セクションE: 現在地マーカー＆アニメーション設定 -->
-        <section class="dock-section">
-          <div class="section-header">
-            <h2>5. 現在地マーカー ＆ 点滅演出</h2>
-            <span id="markerColorBadge" class="badge">#FF453A</span>
-          </div>
-
-          <div class="sub-label">現在地マーカーの色</div>
-          <div class="swatch-row" id="markerColorRow" role="radiogroup" aria-label="現在地マーカーの色">
-            <button type="button" class="swatch" data-color="#ff453a" aria-pressed="true" title="レッド (#FF453A)"></button>
-            <button type="button" class="swatch" data-color="#ff9f0a" aria-pressed="false" title="オレンジ (#FF9F0A)"></button>
-            <button type="button" class="swatch" data-color="#ffd60a" aria-pressed="false" title="イエロー (#FFD60A)"></button>
-            <button type="button" class="swatch" data-color="#30d158" aria-pressed="false" title="グリーン (#30D158)"></button>
-            <button type="button" class="swatch" data-color="#529e78" aria-pressed="false" title="うぐいす (#529E78)"></button>
-            <button type="button" class="swatch" data-color="#64d2ff" aria-pressed="false" title="シアン (#64D2FF)"></button>
-            <button type="button" class="swatch" data-color="#0a84ff" aria-pressed="false" title="ブルー (#0A84FF)"></button>
-            <button type="button" class="swatch" data-color="#ff375f" aria-pressed="false" title="ピンク (#FF375F)"></button>
-            <button type="button" class="swatch" data-color="#ffffff" aria-pressed="false" title="ホワイト (#FFFFFF)"></button>
-            <input type="color" id="markerCustomColor" class="color-picker" value="#ff453a" title="自由な色を選択">
-          </div>
-
-          <div class="control-row">
-            <label for="animTypeSelect">演出パターン</label>
-            <select id="animTypeSelect" class="select-input">
-              <option value="pulse">パルス波（広がる二重同心円）</option>
-              <option value="blink">ブリージング（緩やかな明滅）</option>
-              <option value="radar">ターゲットスコープ（回転照準）</option>
-              <option value="progress">ルート定速進行＋先端パルス</option>
-            </select>
-          </div>
-
-          <div class="control-row">
-            <label for="animSpeedRange">点滅・進行速度</label>
-            <input type="range" id="animSpeedRange" min="0.5" max="5.0" step="0.1" value="2.0">
-            <input type="number" id="animSpeedNum" class="num-input" min="0.5" max="5.0" step="0.1" value="2.0">
-            <span class="unit">x</span>
-          </div>
-
-          <div class="control-row">
-            <label for="markerSizeRange">マーカー半径</label>
-            <input type="range" id="markerSizeRange" min="5" max="26" step="1" value="10">
-            <input type="number" id="markerSizeNum" class="num-input" min="5" max="26" step="1" value="10">
-            <span class="unit">px</span>
-          </div>
-          <span id="speedBadge" hidden>2.0x / 10px</span>
-        </section>
-
-        <!-- セクションF: 動画合成・クロマキー出力設定 -->
-        <section class="dock-section">
-          <div class="section-header">
-            <h2>6. 動画合成モード ＆ 録画時間</h2>
-            <span id="secBadge" class="badge">5秒</span>
-          </div>
-
-          <div class="control-row">
-            <label for="bgModeSelect">出力背景</label>
-            <select id="bgModeSelect" class="select-input">
-              <option value="transparent">背景透過（WebMアルファ / 写真合成）</option>
-              <option value="green">グリーンバック（#00FF00 防スピル済）</option>
-              <option value="blue">ブルーバック（#0000FF 防スピル済）</option>
-              <option value="black">ブラック背景（#000000 スクリーン用）</option>
-            </select>
-          </div>
-
-          <div class="control-row">
-            <label for="recordSecRange">録画秒数</label>
-            <input type="range" id="recordSecRange" min="2" max="30" step="1" value="5">
-            <input type="number" id="recordSecNum" class="num-input" min="2" max="30" step="1" value="5">
-            <span class="unit">秒</span>
-          </div>
-
-          <p id="chromaHint" class="hint-box">
-            Premiere / DaVinci等でそのまま重ねられる透過WebMモードです。
-          </p>
-        </section>
-
-        <!-- 自己診断テスト結果表示領域 -->
-        <pre id="testBox" class="test-box" hidden></pre>
-
-        <!-- ライセンス・セキュリティ保証 -->
-        <div class="privacy-box">
-          🔒 <b>完全ローカル処理・著作権フリーですが武庫労山の名前をどこかに入れてくれたら嬉しいです</b><br>
-          外部地図タイル不使用のため、出力した動画・画像はYouTube等でクレジット表記なし・商用フリーで合成できます。
-        </div>
-
-      </aside>
-
-    </main>
-
-    <!-- ==================== 下部：ステータス＆ショートカットバー ==================== -->
-    <footer class="statusbar">
-      <div id="statusBox" class="status-msg" role="status" aria-live="polite">
-        準備完了。すべての処理はブラウザ内だけで安全に実行されます。
-      </div>
-      <div class="shortcut-hints">
-        <span><b>ドラッグ</b>: 移動</span>
-        <span><b>ホイール</b>: 拡縮</span>
-        <span><b>ダブルクリック</b>: 地点追加</span>
-        <span><b>矢印キー</b>: 微調整</span>
-        <span><b>[G]</b>: ガイド枠</span>
-        <span><b>[P]</b>: プレート</span>
-        <span><b>[Space]</b>: 先頭再生</span>
-      </div>
-    </footer>
-
-  </div>
-
-  <script src="app.js" defer></script>
-</body>
-</html>
+            <strong>GPXファイルをドロップして開始</strong>
+            <span>.gpx ／ 背景写真 ／
